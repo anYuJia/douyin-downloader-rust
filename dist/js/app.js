@@ -183,16 +183,17 @@ async function loadConfig() {
             maxConcurrentSelect.value = config.max_concurrent;
         }
 
-        // 同步cookie到localStorage，供启动检查使用
+        // 同步 cookie 到 localStorage，供启动状态检查使用
         if (config.cookie) {
             localStorage.setItem('cookie', config.cookie);
+        } else {
+            localStorage.removeItem('cookie');
         }
 
         if (config.cookie_set) {
             updateStatus('ready', '已配置');
         } else {
             updateStatus('error', '需要配置Cookie');
-            setTimeout(function() { showCookieSetupModal(); }, 500);
         }
     } catch (error) {
         console.error('加载配置失败:', error);
@@ -221,8 +222,22 @@ async function saveConfig() {
             body: JSON.stringify(config)
         });
         var result = await response.json();
-        if (result.success) showToast('配置保存成功', 'success');
-        else showToast(result.message, 'error');
+        if (result.success) {
+            if (cookieValue) {
+                localStorage.setItem('cookie', cookieValue);
+            } else {
+                localStorage.removeItem('cookie');
+            }
+
+            updateStatus(validation.isValid ? 'ready' : 'error', validation.isValid ? '已配置' : '需要配置Cookie');
+            if (typeof checkCookieStatusOnStartup === 'function') {
+                checkCookieStatusOnStartup();
+            }
+
+            showToast('配置保存成功', 'success');
+        } else {
+            showToast(result.message, 'error');
+        }
     } catch (error) {
         showToast('保存配置失败', 'error');
     }

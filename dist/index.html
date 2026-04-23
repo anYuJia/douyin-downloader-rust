@@ -89,23 +89,6 @@
         </div>
     </nav>
 
-    <!-- Cookie Status Banner -->
-    <div id="cookieStatusBanner" class="cookie-status-banner" style="display: none;">
-        <div class="cookie-banner-content">
-            <i class="bi bi-exclamation-triangle-fill cookie-banner-icon"></i>
-            <div class="cookie-banner-text">
-                <strong>Cookie未设置或已失效</strong>
-                <span>请设置Cookie以使用完整功能</span>
-            </div>
-            <button class="cookie-banner-action" onclick="document.getElementById('settings-toggle').click()">
-                <i class="bi bi-gear"></i> 设置Cookie
-            </button>
-            <button class="cookie-banner-close" onclick="closeCookieBanner()">
-                <i class="bi bi-x"></i>
-            </button>
-        </div>
-    </div>
-
     <!-- Main Content -->
     <main class="main-content">
         <div class="container-fluid px-4">
@@ -115,8 +98,22 @@
                 <div class="empty-hero-icon">
                     <i class="bi bi-play-circle"></i>
                 </div>
-                <h2 class="empty-hero-title">搜索用户，开始下载</h2>
-                <p class="empty-hero-desc">在上方搜索框输入用户昵称或抖音号<br>也可以直接粘贴视频链接到工具栏</p>
+                <h2 class="empty-hero-title" id="emptyHeroTitle">搜索用户，开始下载</h2>
+                <p class="empty-hero-desc" id="emptyHeroDesc">在上方搜索框输入用户昵称或抖音号<br>也可以直接粘贴视频链接到工具栏</p>
+                <div id="cookieOnboardingCard" class="cookie-onboarding-card" style="display: none;">
+                    <div class="cookie-onboarding-eyebrow">
+                        <i class="bi bi-shield-lock-fill"></i>
+                        <span>首次使用建议先配置 Cookie</span>
+                    </div>
+                    <h3 class="cookie-onboarding-title">登录抖音账号后再开始下载</h3>
+                    <p class="cookie-onboarding-copy">
+                        配置后可稳定使用搜索、推荐、点赞列表和批量下载；完成后再搜索用户或粘贴链接。
+                    </p>
+                    <button type="button" class="btn btn-primary cookie-onboarding-btn" onclick="showCookieSetupModal()">
+                        <i class="bi bi-box-arrow-in-right"></i>
+                        <span>配置 Cookie</span>
+                    </button>
+                </div>
                 <div class="empty-hero-shortcuts">
                     <div class="shortcut-card" onclick="document.getElementById('search-input').focus()">
                         <i class="bi bi-search"></i>
@@ -133,10 +130,6 @@
                     <div class="shortcut-card" onclick="document.getElementById('download-liked-btn').click()">
                         <i class="bi bi-heart"></i>
                         <span>点赞视频</span>
-                    </div>
-                    <div class="shortcut-card" onclick="document.getElementById('settings-toggle').click()">
-                        <i class="bi bi-gear"></i>
-                        <span>设置Cookie</span>
                     </div>
                 </div>
             </div>
