@@ -1766,6 +1766,92 @@ textarea.form-control { resize: vertical; }
     padding: 16px 18px;
 }
 
+.recommended-feed-inline-status,
+.recommended-feed-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)),
+        rgba(10, 10, 18, 0.72);
+    color: var(--text-secondary);
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
+}
+
+.recommended-feed-inline-status {
+    min-height: 76px;
+    padding: 18px 16px;
+    font-size: 0.95rem;
+}
+
+.recommended-feed-inline-status i {
+    font-size: 1rem;
+}
+
+.recommended-feed-inline-status .spinner-border,
+.recommended-feed-status__spinner {
+    width: 16px;
+    height: 16px;
+    border-width: 2px;
+    color: currentColor;
+}
+
+.recommended-feed-inline-status--error {
+    border-color: rgba(255, 71, 87, 0.28);
+    background:
+        linear-gradient(180deg, rgba(255, 71, 87, 0.1), rgba(255, 71, 87, 0.03)),
+        rgba(10, 10, 18, 0.76);
+    color: #ff8e98;
+}
+
+.recommended-feed-inline-status--empty {
+    border-color: rgba(37, 244, 238, 0.18);
+    color: #8ed8d4;
+}
+
+.recommended-feed-status {
+    min-height: 48px;
+    padding: 12px 14px;
+    font-size: 0.86rem;
+    letter-spacing: 0.01em;
+}
+
+.recommended-feed-status__spinner {
+    display: none;
+    flex-shrink: 0;
+}
+
+.recommended-feed-status.is-loading {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    color: #ff9ab0;
+}
+
+.recommended-feed-status.is-hint {
+    border-color: rgba(37, 244, 238, 0.18);
+    color: #9ddfdb;
+}
+
+.recommended-feed-status.is-done {
+    border-color: rgba(0, 214, 143, 0.26);
+    background:
+        linear-gradient(180deg, rgba(0, 214, 143, 0.09), rgba(0, 214, 143, 0.03)),
+        rgba(10, 10, 18, 0.74);
+    color: #96e8c8;
+}
+
+.recommended-feed-status.is-error {
+    border-color: rgba(255, 71, 87, 0.28);
+    background:
+        linear-gradient(180deg, rgba(255, 71, 87, 0.1), rgba(255, 71, 87, 0.03)),
+        rgba(10, 10, 18, 0.76);
+    color: #ff8e98;
+}
+
 .section-panel--profile .section-panel-body,
 .section-panel--catalog .section-panel-body {
     padding: 18px;

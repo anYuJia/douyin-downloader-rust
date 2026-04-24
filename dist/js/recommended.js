@@ -32,6 +32,59 @@ const LOAD_MORE_COUNT = 20;    // 每次加载更多数量
 const UNIFIED_IMAGE_DURATION_MS = 1500;
 const UNIFIED_WHEEL_THROTTLE_MS = 1000;  // 1秒内只允许切换一个视频
 
+function getRecommendedFeedInlineStatusHtml(text, tone) {
+    const iconHtml = tone === 'loading'
+        ? '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>'
+        : (tone === 'error'
+            ? '<i class="bi bi-exclamation-circle"></i>'
+            : '<i class="bi bi-collection-play"></i>');
+    const toneClass = tone === 'error'
+        ? ' recommended-feed-inline-status--error'
+        : (tone === 'empty' ? ' recommended-feed-inline-status--empty' : '');
+
+    return '<div class="col-12">'
+        + '<div class="recommended-feed-inline-status' + toneClass + '">'
+        + iconHtml
+        + '<span>' + text + '</span>'
+        + '</div>'
+        + '</div>';
+}
+
+function setRecommendedFeedInlineStatus(text, tone) {
+    const list = document.getElementById('recommendedFeedList');
+    if (!list) return;
+    list.innerHTML = getRecommendedFeedInlineStatusHtml(text, tone);
+}
+
+function updateRecommendedLoadIndicator(state, text) {
+    const container = document.getElementById('loadMoreRecommended');
+    const label = document.getElementById('loadMoreRecommendedText');
+    const spinner = container ? container.querySelector('.recommended-feed-status__spinner') : null;
+
+    if (!container || !label || !spinner) return;
+
+    container.classList.remove('is-loading', 'is-hint', 'is-done', 'is-error');
+
+    if (state === 'hidden') {
+        container.style.display = 'none';
+        label.textContent = '';
+        spinner.style.display = 'none';
+        return;
+    }
+
+    const fallbackTextMap = {
+        loading: '正在获取视频中...',
+        hint: '继续下滑，自动获取更多视频',
+        done: '已显示全部推荐视频',
+        error: '获取推荐视频失败，请稍后再试'
+    };
+
+    label.textContent = text || fallbackTextMap[state] || '';
+    container.style.display = 'flex';
+    container.classList.add(`is-${state}`);
+    spinner.style.display = state === 'loading' ? 'inline-flex' : 'none';
+}
+
 function disposeUnifiedVideoElement(videoEl) {
     if (!videoEl) return;
 
@@ -166,15 +219,15 @@ async function showRecommendedFeed() {
             // 清空并重新显示所有视频
             document.getElementById('recommendedFeedList').textContent = '';
             displayRecommendedVideos(recommendedVideos);
-
-            // 显示/隐藏加载更多按钮
-            document.getElementById('loadMoreRecommended').style.display =
-                hasMoreRecommended ? 'block' : 'none';
+            updateRecommendedLoadIndicator(
+                hasMoreRecommended ? 'hint' : 'done',
+                hasMoreRecommended ? '继续下滑，自动获取更多视频' : '已显示全部推荐视频'
+            );
             return;
         }
 
-        const list = document.getElementById('recommendedFeedList');
-        list.innerHTML = '<div class="col-12 text-center text-muted py-4">推荐视频加载中...</div>';
+        setRecommendedFeedInlineStatus('正在获取视频中...', 'loading');
+        updateRecommendedLoadIndicator('loading', '正在获取视频中...');
 
         if (isLoadingMore) {
             console.log('[showRecommendedFeed] 后台加载中，先显示推荐区域');
@@ -185,6 +238,7 @@ async function showRecommendedFeed() {
         console.log('[showRecommendedFeed] 无缓存数据，开始加载');
         recommendedVideos = [];
         recommendedCursor = 0;
+        hasMoreRecommended = false;
         await loadRecommendedFeed(INITIAL_LOAD_COUNT);
     } finally {
         isInitializing = false;  // 重置标志位
@@ -195,8 +249,10 @@ function closeRecommendedFeed() {
     restoreRecommendedReturnState();
     recommendedVideos = [];
     recommendedCursor = 0;
+    hasMoreRecommended = false;
     isInitializing = false;  // 重置初始化标志
     isLoadingMore = false;   // 重置加载标志
+    updateRecommendedLoadIndicator('hidden');
 }
 
 async function loadRecommendedFeed(count = LOAD_MORE_COUNT) {
@@ -207,9 +263,14 @@ async function loadRecommendedFeed(count = LOAD_MORE_COUNT) {
     }
 
     try {
+        const hadVideosBeforeLoad = recommendedVideos.length > 0;
         isLoadingMore = true;
         console.log('[loadRecommendedFeed] 开始请求 API, count:', count);
         updateStatus('working', '加载中...');
+        updateRecommendedLoadIndicator(
+            'loading',
+            hadVideosBeforeLoad ? '正在获取更多视频...' : '正在获取视频中...'
+        );
 
         const response = await fetch('/api/recommended_feed', {
             method: 'POST',
@@ -242,11 +303,23 @@ async function loadRecommendedFeed(count = LOAD_MORE_COUNT) {
             // 只有在推荐视频界面可见时才显示卡片
             const section = document.getElementById('recommendedFeedSection');
             if (section && section.style.display === 'block' && !isPlayerOpen) {
-                displayRecommendedVideos(newVideos);
+                const list = document.getElementById('recommendedFeedList');
+                if (previousCount === 0 && list) {
+                    list.textContent = '';
+                }
 
-                // 显示/隐藏加载更多按钮
-                document.getElementById('loadMoreRecommended').style.display =
-                    hasMoreRecommended ? 'block' : 'none';
+                if (newVideos.length > 0) {
+                    displayRecommendedVideos(newVideos);
+                } else if (previousCount === 0) {
+                    setRecommendedFeedInlineStatus('暂时没有获取到推荐视频', 'empty');
+                }
+
+                updateRecommendedLoadIndicator(
+                    hasMoreRecommended ? 'hint' : 'done',
+                    hasMoreRecommended
+                        ? '继续下滑，自动获取更多视频'
+                        : (recommendedVideos.length > 0 ? '已显示全部推荐视频' : '暂时没有可显示的推荐视频')
+                );
 
                 // 首屏列表不足一屏时允许继续补齐，但普通场景必须仍然接近底部才继续加载。
                 setTimeout(function() {
@@ -260,11 +333,19 @@ async function loadRecommendedFeed(count = LOAD_MORE_COUNT) {
         } else {
             console.error('[loadRecommendedFeed] 失败:', data.message);
             showToast(data.message || '加载失败', 'error');
+            if (recommendedVideos.length === 0) {
+                setRecommendedFeedInlineStatus('获取推荐视频失败，请稍后再试', 'error');
+            }
+            updateRecommendedLoadIndicator('error', '获取推荐视频失败，请稍后再试');
             updateStatus('ready', '就绪');
         }
     } catch (error) {
         console.error('[loadRecommendedFeed] 错误:', error);
         showToast('加载推荐视频失败', 'error');
+        if (recommendedVideos.length === 0) {
+            setRecommendedFeedInlineStatus('加载推荐视频失败，请稍后再试', 'error');
+        }
+        updateRecommendedLoadIndicator('error', '加载推荐视频失败，请稍后再试');
         updateStatus('ready', '就绪');
     } finally {
         isLoadingMore = false;
@@ -566,7 +647,9 @@ async function refreshCurrentUnifiedVideoFromDetail() {
 async function refreshRecommendedFeed() {
     recommendedVideos = [];
     recommendedCursor = 0;
-    document.getElementById('recommendedFeedList').textContent = '';
+    hasMoreRecommended = false;
+    setRecommendedFeedInlineStatus('正在获取视频中...', 'loading');
+    updateRecommendedLoadIndicator('loading', '正在刷新推荐视频...');
     await loadRecommendedFeed(INITIAL_LOAD_COUNT);
 }
 

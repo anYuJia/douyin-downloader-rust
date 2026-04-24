@@ -170,10 +170,9 @@
                     <div class="section-panel-body">
                         <div id="recommendedFeedList" class="row"></div>
                         <div id="recommendedScrollSentinel" style="height:1px;visibility:hidden;"></div>
-                        <div id="loadMoreRecommended" class="text-center mt-3" style="display:none;">
-                            <button class="btn btn-primary" onclick="loadMoreRecommendedFeed()">
-                                <i class="bi bi-arrow-down"></i> 加载更多
-                            </button>
+                        <div id="loadMoreRecommended" class="recommended-feed-status mt-3" style="display:none;" aria-live="polite">
+                            <span class="recommended-feed-status__spinner spinner-border spinner-border-sm" aria-hidden="true"></span>
+                            <span id="loadMoreRecommendedText" class="recommended-feed-status__text">继续下滑，自动获取更多视频</span>
                         </div>
                     </div>
                 </div>
