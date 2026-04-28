@@ -337,7 +337,7 @@ function showVerifyDialog(verifyUrl) {
     // 检查是否是临时 cookie（未登录）
     const cookieInput = document.getElementById('cookie-input');
     const cookieValue = cookieInput ? cookieInput.value : '';
-    const hasLoginCookie = cookieValue.includes('sessionid');
+    const hasLoginCookie = cookieValue.includes('sessionid') || (cookieInput && cookieInput.dataset.cookieSet === 'true');
 
     if (!hasLoginCookie) {
         // 未登录状态，提示可能需要验证

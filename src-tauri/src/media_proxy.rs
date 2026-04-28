@@ -23,17 +23,70 @@ struct MediaProxyQuery {
     media_type: Option<String>,
 }
 
-fn is_allowed_media_url(url: &str) -> bool {
-    let allowed = [
-        "douyin",
-        "douyinvod",
-        "douyinpic",
-        "byteimg",
-        "douyinstatic",
-        "ixigua",
+fn host_matches(host: &str, allowed_domain: &str) -> bool {
+    host == allowed_domain || host.ends_with(&format!(".{}", allowed_domain))
+}
+
+fn is_allowed_media_url(url: &Url) -> bool {
+    if url.scheme() != "https" && url.scheme() != "http" {
+        return false;
+    }
+
+    let Some(host) = url.host_str().map(|host| host.to_ascii_lowercase()) else {
+        return false;
+    };
+
+    const ALLOWED_MEDIA_DOMAINS: &[&str] = &[
+        "douyin.com",
+        "douyinvod.com",
+        "douyinpic.com",
+        "douyinstatic.com",
+        "byteimg.com",
+        "ixigua.com",
+        "amemv.com",
+        "snssdk.com",
+        "pstatp.com",
     ];
 
-    allowed.iter().any(|part| url.contains(part))
+    ALLOWED_MEDIA_DOMAINS
+        .iter()
+        .any(|domain| host_matches(&host, domain))
+}
+
+fn should_send_cookie(url: &Url) -> bool {
+    let Some(host) = url.host_str().map(|host| host.to_ascii_lowercase()) else {
+        return false;
+    };
+
+    const COOKIE_DOMAINS: &[&str] = &["douyin.com", "amemv.com", "snssdk.com"];
+
+    COOKIE_DOMAINS
+        .iter()
+        .any(|domain| host_matches(&host, domain))
+}
+
+fn allowed_request_origin(request_headers: &HeaderMap) -> Option<Option<HeaderValue>> {
+    let Some(origin) = request_headers.get(header::ORIGIN) else {
+        return Some(None);
+    };
+
+    let origin_str = origin.to_str().ok()?;
+    let parsed = Url::parse(origin_str).ok()?;
+    let scheme = parsed.scheme();
+    let host = parsed.host_str()?.to_ascii_lowercase();
+    let port = parsed.port_or_known_default();
+
+    let allowed = (scheme == "http"
+        && (host == "127.0.0.1" || host == "localhost")
+        && port == Some(MEDIA_PROXY_PORT))
+        || (scheme == "http" && host == "tauri.localhost")
+        || (scheme == "tauri" && host == "localhost");
+
+    if allowed {
+        Some(Some(origin.clone()))
+    } else {
+        None
+    }
 }
 
 fn build_error_response(status: StatusCode, message: &str) -> Response<Body> {
@@ -113,17 +166,17 @@ async fn media_proxy(
         .and_then(|value| value.to_str().ok())
         .unwrap_or("")
         .to_string();
-
-    if query.url.is_empty() || !is_allowed_media_url(&query.url) {
-        return build_error_response(StatusCode::BAD_REQUEST, "Invalid URL");
-    }
+    let allow_origin = match allowed_request_origin(&request_headers) {
+        Some(origin) => origin,
+        None => return build_error_response(StatusCode::FORBIDDEN, "Forbidden"),
+    };
 
     let parsed_url = match Url::parse(&query.url) {
         Ok(url) => url,
         Err(_) => return build_error_response(StatusCode::BAD_REQUEST, "Invalid URL"),
     };
 
-    if parsed_url.scheme() != "https" && parsed_url.scheme() != "http" {
+    if query.url.is_empty() || !is_allowed_media_url(&parsed_url) {
         return build_error_response(StatusCode::BAD_REQUEST, "Invalid URL");
     }
 
@@ -153,6 +206,16 @@ async fn media_proxy(
     let mut redirect_hops = 0usize;
     let mut retry_count = 0usize;
     let upstream_response = loop {
+        let parsed_upstream_url = match Url::parse(&upstream_url) {
+            Ok(url) if is_allowed_media_url(&url) => url,
+            _ => {
+                if let Some(key) = &cache_key {
+                    state.media_redirect_cache.lock().await.remove(key);
+                }
+                return build_error_response(StatusCode::BAD_REQUEST, "Invalid URL");
+            }
+        };
+
         let mut upstream = state
             .media_http_client
             .get(&upstream_url)
@@ -161,7 +224,7 @@ async fn media_proxy(
             .header("Accept", "*/*")
             .header("Accept-Encoding", "identity;q=1, *;q=0");
 
-        if !config.cookie.is_empty() {
+        if !config.cookie.is_empty() && should_send_cookie(&parsed_upstream_url) {
             upstream = upstream.header("Cookie", &config.cookie);
         }
 
@@ -186,8 +249,20 @@ async fn media_proxy(
                     }
 
                     if let Some(next_url) = resolve_redirect_target(response.url(), location) {
+                        let next_parsed = match Url::parse(&next_url) {
+                            Ok(url) if is_allowed_media_url(&url) => url,
+                            _ => {
+                                if let Some(key) = &cache_key {
+                                    state.media_redirect_cache.lock().await.remove(key);
+                                }
+                                return build_error_response(
+                                    StatusCode::BAD_REQUEST,
+                                    "Invalid redirect URL",
+                                );
+                            }
+                        };
                         redirect_hops += 1;
-                        upstream_url = next_url;
+                        upstream_url = next_parsed.to_string();
                         continue;
                     }
                 }
@@ -314,7 +389,7 @@ async fn media_proxy(
 
     response_headers.insert(
         header::ACCESS_CONTROL_ALLOW_ORIGIN,
-        HeaderValue::from_static("*"),
+        allow_origin.unwrap_or_else(|| HeaderValue::from_static("*")),
     );
     response_headers.insert(
         header::CACHE_CONTROL,
@@ -353,4 +428,47 @@ pub async fn spawn_media_proxy(state: AppState) -> anyhow::Result<()> {
     });
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validates_media_url_by_host() {
+        let allowed =
+            Url::parse("https://v3-dy-o-abtest.zjcdn.com.douyinvod.com/video.mp4").unwrap();
+        assert!(is_allowed_media_url(&allowed));
+
+        let malicious = Url::parse("https://evil.example/?next=douyin.com/video.mp4").unwrap();
+        assert!(!is_allowed_media_url(&malicious));
+
+        let lookalike = Url::parse("https://douyin.com.evil.example/video.mp4").unwrap();
+        assert!(!is_allowed_media_url(&lookalike));
+    }
+
+    #[test]
+    fn only_sends_cookie_to_login_related_hosts() {
+        let douyin = Url::parse("https://www.douyin.com/aweme/v1/play/").unwrap();
+        assert!(should_send_cookie(&douyin));
+
+        let cdn = Url::parse("https://example.douyinvod.com/video.mp4").unwrap();
+        assert!(!should_send_cookie(&cdn));
+    }
+
+    #[test]
+    fn validates_request_origin() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::ORIGIN,
+            HeaderValue::from_static("http://127.0.0.1:39143"),
+        );
+        assert!(allowed_request_origin(&headers).is_some());
+
+        headers.insert(
+            header::ORIGIN,
+            HeaderValue::from_static("https://evil.example"),
+        );
+        assert!(allowed_request_origin(&headers).is_none());
+    }
 }

@@ -182,7 +182,14 @@ async function loadConfig() {
         var response = await fetch('/api/config');
         var config = await response.json();
         document.getElementById('download-dir-input').value = config.download_dir || '';
-        document.getElementById('cookie-input').value = config.cookie || '';
+        var cookieInput = document.getElementById('cookie-input');
+        if (cookieInput) {
+            cookieInput.value = '';
+            cookieInput.dataset.cookieSet = config.cookie_set ? 'true' : 'false';
+            cookieInput.placeholder = config.cookie_set
+                ? 'Cookie 已保存；输入新 Cookie 可替换'
+                : '粘贴抖音Cookie';
+        }
         var downloadQualitySelect = document.getElementById('download-quality-select');
         if (downloadQualitySelect) {
             downloadQualitySelect.value = config.download_quality || 'auto';
@@ -190,13 +197,6 @@ async function loadConfig() {
         var maxConcurrentSelect = document.getElementById('max-concurrent-select');
         if (maxConcurrentSelect && config.max_concurrent) {
             maxConcurrentSelect.value = config.max_concurrent;
-        }
-
-        // 同步 cookie 到 localStorage，供启动状态检查使用
-        if (config.cookie) {
-            localStorage.setItem('cookie', config.cookie);
-        } else {
-            localStorage.removeItem('cookie');
         }
 
         if (config.cookie_set) {
@@ -211,19 +211,25 @@ async function loadConfig() {
 }
 
 async function saveConfig() {
-    var cookieValue = document.getElementById('cookie-input').value.trim();
-    var validation = validateCookie(cookieValue);
-    if (!validation.isValid && validation.status !== 'empty') {
+    var cookieInput = document.getElementById('cookie-input');
+    var cookieValue = cookieInput ? cookieInput.value.trim() : '';
+    var hasSavedCookie = cookieInput && cookieInput.dataset.cookieSet === 'true';
+    var validation = cookieValue
+        ? validateCookie(cookieValue)
+        : (hasSavedCookie ? { isValid: true, status: 'saved', message: 'Cookie 已保存', missingParams: [], loginType: 'saved' } : validateCookie(''));
+    if (cookieValue && !validation.isValid) {
         showToast('Cookie验证失败，请检查必要参数', 'error');
         updateCookieValidationUI(validation);
         return;
     }
     var config = {
         download_dir: document.getElementById('download-dir-input').value,
-        cookie: cookieValue,
         download_quality: document.getElementById('download-quality-select').value || 'auto',
         max_concurrent: parseInt(document.getElementById('max-concurrent-select').value) || 3
     };
+    if (cookieValue) {
+        config.cookie = cookieValue;
+    }
     try {
         var response = await fetch('/api/config', {
             method: 'POST',
@@ -232,10 +238,11 @@ async function saveConfig() {
         });
         var result = await response.json();
         if (result.success) {
-            if (cookieValue) {
-                localStorage.setItem('cookie', cookieValue);
-            } else {
-                localStorage.removeItem('cookie');
+            if (cookieInput && cookieValue) {
+                cookieInput.value = '';
+                cookieInput.dataset.cookieSet = 'true';
+                cookieInput.placeholder = 'Cookie 已保存；输入新 Cookie 可替换';
+                validation = { isValid: true, status: 'saved', message: 'Cookie 已保存', missingParams: [], loginType: 'saved' };
             }
 
             updateStatus(validation.isValid ? 'ready' : 'error', validation.isValid ? '已配置' : '需要配置Cookie');
@@ -1749,11 +1756,27 @@ async function downloadAuthorAndWait(secUid, nickname) {
             var taskId = result.task_id;
             if (!taskId) { resolve({ success: false }); return; }
             createDownloadProgressElement(taskId, nickname + ' 的视频');
-            var onDone = function(d) { if (d.task_id === taskId) { socket.off('download_completed', onDone); socket.off('download_error', onErr); resolve({ success: true }); } };
-            var onErr = function(d) { if (d.task_id === taskId) { socket.off('download_completed', onDone); socket.off('download_error', onErr); resolve({ success: false }); } };
-            socket.on('download_completed', onDone);
+            var settled = false;
+            var cleanup = function() {
+                socket.off('batch_download_completed', onDone);
+                socket.off('batch_download_cancelled', onErr);
+                socket.off('download_failed', onErr);
+                socket.off('download_error', onErr);
+                clearTimeout(timeoutId);
+            };
+            var finish = function(success) {
+                if (settled) return;
+                settled = true;
+                cleanup();
+                resolve({ success: success });
+            };
+            var onDone = function(d) { if (d.task_id === taskId) finish(true); };
+            var onErr = function(d) { if (d.task_id === taskId) finish(false); };
+            var timeoutId = setTimeout(function() { finish(false); }, 30 * 60 * 1000);
+            socket.on('batch_download_completed', onDone);
+            socket.on('batch_download_cancelled', onErr);
+            socket.on('download_failed', onErr);
             socket.on('download_error', onErr);
-            setTimeout(function() { socket.off('download_completed', onDone); socket.off('download_error', onErr); resolve({ success: false }); }, 30 * 60 * 1000);
         } catch (e) { resolve({ success: false }); }
     });
 }

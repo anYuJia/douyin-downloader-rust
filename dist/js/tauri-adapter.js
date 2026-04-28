@@ -15,6 +15,24 @@
     const socketListeners = {};
     let socketId = 0;
 
+    function clearLegacyCookieStorage() {
+        try {
+            localStorage.removeItem('cookie');
+            const rawConfig = localStorage.getItem('dy_downloader_web_config');
+            if (!rawConfig) return;
+
+            const storedConfig = JSON.parse(rawConfig) || {};
+            if (!Object.prototype.hasOwnProperty.call(storedConfig, 'cookie')) return;
+
+            const hadCookie = Boolean(String(storedConfig.cookie || '').trim());
+            delete storedConfig.cookie;
+            storedConfig.cookie_set = Boolean(storedConfig.cookie_set || hadCookie);
+            localStorage.setItem('dy_downloader_web_config', JSON.stringify(storedConfig));
+        } catch (error) {}
+    }
+
+    clearLegacyCookieStorage();
+
     function jsonResponse(payload, status) {
         return new Response(JSON.stringify(payload), {
             status: status || 200,
@@ -282,13 +300,12 @@
             storedConfig = {};
         }
 
-        const cookie = storedConfig.cookie || localStorage.getItem('cookie') || '';
         return Object.assign({}, storedConfig, {
             download_dir: storedConfig.download_dir || storedConfig.download_path || '',
             download_path: storedConfig.download_path || storedConfig.download_dir || '',
-            cookie: cookie,
+            cookie: '',
             max_concurrent: normalizePositiveInteger(storedConfig.max_concurrent, 3),
-            cookie_set: Boolean(cookie.trim())
+            cookie_set: Boolean(storedConfig.cookie_set)
         });
     }
 
@@ -300,22 +317,15 @@
 
         nextConfig.download_dir = nextConfig.download_dir || nextConfig.download_path || '';
         nextConfig.download_path = nextConfig.download_path || nextConfig.download_dir || '';
-        nextConfig.cookie = nextConfig.cookie || '';
         nextConfig.max_concurrent = normalizePositiveInteger(nextConfig.max_concurrent, 3);
-        nextConfig.cookie_set = Boolean(nextConfig.cookie.trim());
+        nextConfig.cookie_set = Boolean(nextConfig.cookie_set || (partialConfig && partialConfig.cookie));
 
         localStorage.setItem('dy_downloader_web_config', JSON.stringify({
             download_dir: nextConfig.download_dir,
             download_path: nextConfig.download_path,
-            cookie: nextConfig.cookie,
+            cookie_set: nextConfig.cookie_set,
             max_concurrent: nextConfig.max_concurrent
         }));
-
-        if (nextConfig.cookie) {
-            localStorage.setItem('cookie', nextConfig.cookie);
-        } else {
-            localStorage.removeItem('cookie');
-        }
 
         return nextConfig;
     }
@@ -468,8 +478,8 @@
                 download_path: (config && (config.download_path || config.download_dir)) || '',
                 download_quality: (config && config.download_quality) || 'auto',
                 max_concurrent: (config && config.max_concurrent) || 3,
-                cookie: (config && config.cookie) || '',
-                cookie_set: Boolean(config && config.cookie && String(config.cookie).trim())
+                cookie: '',
+                cookie_set: Boolean(config && (config.cookie_set || (config.cookie && String(config.cookie).trim())))
             });
         }
 

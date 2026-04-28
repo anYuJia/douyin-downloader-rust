@@ -111,15 +111,29 @@ async fn init_client(state: State<'_, AppState>) -> Result<serde_json::Value, St
 #[tauri::command]
 fn get_config(state: State<'_, AppState>) -> serde_json::Value {
     let config = state.config.blocking_lock().clone();
-    serde_json::to_value(&config).unwrap_or_else(|_| serde_json::json!({}))
+    let cookie_set = !config.cookie.trim().is_empty();
+    let mut value = serde_json::to_value(&config).unwrap_or_else(|_| serde_json::json!({}));
+    if let Some(object) = value.as_object_mut() {
+        object.insert("cookie".to_string(), serde_json::json!(""));
+        object.insert("cookie_set".to_string(), serde_json::json!(cookie_set));
+    }
+    value
 }
 
 /// 保存配置
 #[tauri::command]
 fn save_config(state: State<'_, AppState>, config: AppConfig) -> serde_json::Value {
-    match config.save() {
+    let mut next_config = config;
+    {
+        let current_config = state.config.blocking_lock();
+        if next_config.cookie.trim().is_empty() && !current_config.cookie.trim().is_empty() {
+            next_config.cookie = current_config.cookie.clone();
+        }
+    }
+
+    match next_config.save() {
         Ok(_) => {
-            *state.config.blocking_lock() = config;
+            *state.config.blocking_lock() = next_config.clone();
             serde_json::json!({ "success": true, "message": "配置保存成功" })
         }
         Err(e) => {
@@ -439,7 +453,7 @@ async fn cookie_browser_login(
                             serde_json::json!({
                                 "event": "success",
                                 "message": format!("Cookie 获取成功！已登录为 {}", current_user.nickname),
-                                "cookie": cookie_string
+                                "cookie_set": true
                             }),
                         )
                         .await;
