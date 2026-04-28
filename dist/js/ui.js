@@ -1582,6 +1582,16 @@ function initUpdateChecker() {
         });
     }
 
+    const restartBtn = document.getElementById('update-restart-btn');
+    if (restartBtn) {
+        restartBtn.addEventListener('click', function() {
+            fetch('/api/restart_app').catch(function(error) {
+                console.error('Restart app failed:', error);
+                showToast('重启应用失败，请手动重启', 'error');
+            });
+        });
+    }
+
     setTimeout(function() {
         checkForUpdates(false);
     }, 3000);
@@ -1600,27 +1610,37 @@ function checkForUpdates(showNoUpdateToast) {
         .then(function(response) { return response.json(); })
         .then(function(result) {
             if (result.success && result.has_update) {
-                const versionEl = document.getElementById('update-version');
-                const notesEl = document.getElementById('update-notes');
-                const dateEl = document.getElementById('update-date');
-                const progressGroup = document.getElementById('update-progress-group');
+                const currentVersionEl = document.getElementById('update-current-version');
+                const newVersionEl = document.getElementById('update-new-version');
+                const notesEl = document.getElementById('update-release-notes');
+                const progressArea = document.getElementById('update-progress-area');
+                const progressText = document.getElementById('update-progress-text');
+                const progressBar = document.getElementById('update-progress-bar');
                 const downloadBtn = document.getElementById('update-download-btn');
                 const restartBtn = document.getElementById('update-restart-btn');
 
-                if (versionEl) {
-                    versionEl.textContent = 'v' + (result.current_version || '') + ' → v' + (result.version || '');
+                if (currentVersionEl) {
+                    currentVersionEl.textContent = 'v' + (result.current_version || '');
+                }
+                if (newVersionEl) {
+                    newVersionEl.textContent = 'v' + (result.version || '');
                 }
                 if (notesEl) {
                     notesEl.textContent = result.notes || '暂无更新说明';
                 }
-                if (dateEl) {
-                    dateEl.textContent = result.date ? new Date(result.date).toLocaleDateString() : '';
+                if (progressArea) {
+                    progressArea.style.display = 'none';
                 }
-                if (progressGroup) {
-                    progressGroup.style.display = 'none';
+                if (progressBar) {
+                    progressBar.style.width = '0%';
+                }
+                if (progressText) {
+                    progressText.textContent = '';
                 }
                 if (downloadBtn) {
                     downloadBtn.style.display = 'inline-block';
+                    downloadBtn.disabled = false;
+                    downloadBtn.innerHTML = '<i class="bi bi-download"></i> 立即更新';
                 }
                 if (restartBtn) {
                     restartBtn.style.display = 'none';
@@ -1661,18 +1681,22 @@ function downloadAndInstallUpdate() {
     const downloadBtn = document.getElementById('update-download-btn');
     const restartBtn = document.getElementById('update-restart-btn');
     const progressBar = document.getElementById('update-progress-bar');
-    const progressGroup = document.getElementById('update-progress-group');
+    const progressArea = document.getElementById('update-progress-area');
+    const progressText = document.getElementById('update-progress-text');
     const statusEl = document.getElementById('update-status');
 
     if (downloadBtn) {
         downloadBtn.disabled = true;
-        downloadBtn.textContent = '下载中...';
+        downloadBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> 下载中...';
     }
-    if (progressGroup) {
-        progressGroup.style.display = 'block';
+    if (progressArea) {
+        progressArea.style.display = 'block';
     }
     if (progressBar) {
         progressBar.style.width = '0%';
+    }
+    if (progressText) {
+        progressText.textContent = '准备下载...';
     }
     if (statusEl) {
         statusEl.textContent = '正在下载更新...';
@@ -1686,6 +1710,9 @@ function downloadAndInstallUpdate() {
         if (progressBar) {
             progressBar.style.width = Math.round(progress) + '%';
         }
+        if (progressText) {
+            progressText.textContent = '已下载 ' + Math.round(progress) + '%';
+        }
     }, 300);
 
     fetch('/api/download_update')
@@ -1695,10 +1722,13 @@ function downloadAndInstallUpdate() {
             if (progressBar) {
                 progressBar.style.width = '100%';
             }
+            if (progressText) {
+                progressText.textContent = result.success ? '下载并安装完成' : '下载失败';
+            }
 
             if (result.success) {
                 if (statusEl) {
-                    statusEl.textContent = '下载完成，即将安装...';
+                    statusEl.textContent = '更新已安装，重启后生效';
                     statusEl.className = 'text-success';
                 }
                 if (downloadBtn) {
@@ -1707,7 +1737,7 @@ function downloadAndInstallUpdate() {
                 if (restartBtn) {
                     restartBtn.style.display = 'inline-block';
                 }
-                showToast('更新包已下载完成，安装后将自动重启应用', 'success');
+                showToast('更新已安装，重启后生效', 'success');
             } else {
                 if (statusEl) {
                     statusEl.textContent = '下载失败: ' + (result.message || '未知错误');
@@ -1715,7 +1745,7 @@ function downloadAndInstallUpdate() {
                 }
                 if (downloadBtn) {
                     downloadBtn.disabled = false;
-                    downloadBtn.textContent = '下载并安装';
+                    downloadBtn.innerHTML = '<i class="bi bi-download"></i> 立即更新';
                 }
                 showToast('下载更新失败: ' + (result.message || '未知错误'), 'error');
             }
@@ -1726,13 +1756,16 @@ function downloadAndInstallUpdate() {
             if (progressBar) {
                 progressBar.style.width = '100%';
             }
+            if (progressText) {
+                progressText.textContent = '下载失败';
+            }
             if (statusEl) {
                 statusEl.textContent = '下载失败';
                 statusEl.className = 'text-danger';
             }
             if (downloadBtn) {
                 downloadBtn.disabled = false;
-                downloadBtn.textContent = '下载并安装';
+                downloadBtn.innerHTML = '<i class="bi bi-download"></i> 立即更新';
             }
             showToast('下载更新失败', 'error');
         });

@@ -465,6 +465,10 @@
             path !== '/api/download_history/delete' &&
             path !== '/api/download_history/open' &&
             path !== '/api/download_history/open_location' &&
+            path !== '/api/get_app_version' &&
+            path !== '/api/check_update' &&
+            path !== '/api/download_update' &&
+            path !== '/api/restart_app' &&
             path !== '/api/cookie/generate_temp';
 
         if (needsClient) {
@@ -828,6 +832,10 @@
 
         if (path === '/api/download_update') {
             return invoke('download_update');
+        }
+
+        if (path === '/api/restart_app') {
+            return invoke('restart_app');
         }
 
         if (path === '/api/download_music') {

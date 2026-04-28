@@ -121,8 +121,7 @@ impl SM3 {
             self.buffer.push(0);
         }
 
-        self.buffer
-            .extend_from_slice(&(bit_len as u64).to_be_bytes());
+        self.buffer.extend_from_slice(&bit_len.to_be_bytes());
 
         if self.buffer.len() == 64 {
             let block: [u8; 64] = self.buffer.clone().try_into().unwrap();
@@ -195,9 +194,15 @@ impl SM3 {
             a[4] = p0(tt2);
         }
 
-        for i in 0..8 {
-            self.state[i] ^= a[i];
+        for (state, value) in self.state.iter_mut().zip(a) {
+            *state ^= value;
         }
+    }
+}
+
+impl Default for SM3 {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -250,6 +255,10 @@ pub fn custom_base64_encode(data: &[u8]) -> String {
 const WINDOW_ENV_STR: &str = "1536|747|1536|834|0|30|0|0|1536|834|1536|864|1525|747|24|24|Win32";
 
 /// 生成随机字节
+fn mix_random_byte(value: u32, value_mask: u32, salt: u32, salt_mask: u32) -> u8 {
+    ((value & value_mask) | (salt & salt_mask)) as u8
+}
+
 fn generate_random_bytes() -> Vec<u8> {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -264,24 +273,24 @@ fn generate_random_bytes() -> Vec<u8> {
 
     // 生成 3 组随机字节
     result.extend_from_slice(&[
-        ((r1 & 0xFF & 0xAA) | (3 & 0x55)) as u8,
-        ((r1 & 0xFF & 0x55) | (3 & 0xAA)) as u8,
-        (((r1 >> 8) & 0xFF & 0xAA) | (45 & 0x55)) as u8,
-        (((r1 >> 8) & 0xFF & 0x55) | (45 & 0xAA)) as u8,
+        mix_random_byte(r1, 0xAA, 3, 0x55),
+        mix_random_byte(r1, 0x55, 3, 0xAA),
+        mix_random_byte(r1 >> 8, 0xAA, 45, 0x55),
+        mix_random_byte(r1 >> 8, 0x55, 45, 0xAA),
     ]);
 
     result.extend_from_slice(&[
-        ((r2 & 0xFF & 0xAA) | (1 & 0x55)) as u8,
-        ((r2 & 0xFF & 0x55) | (1 & 0xAA)) as u8,
-        (((r2 >> 8) & 0xFF & 0xAA) | (0 & 0x55)) as u8,
-        (((r2 >> 8) & 0xFF & 0x55) | (0 & 0xAA)) as u8,
+        mix_random_byte(r2, 0xAA, 1, 0x55),
+        mix_random_byte(r2, 0x55, 1, 0xAA),
+        mix_random_byte(r2 >> 8, 0xAA, 0, 0x55),
+        mix_random_byte(r2 >> 8, 0x55, 0, 0xAA),
     ]);
 
     result.extend_from_slice(&[
-        ((r3 & 0xFF & 0xAA) | (1 & 0x55)) as u8,
-        ((r3 & 0xFF & 0x55) | (1 & 0xAA)) as u8,
-        (((r3 >> 8) & 0xFF & 0xAA) | (5 & 0x55)) as u8,
-        (((r3 >> 8) & 0xFF & 0x55) | (5 & 0xAA)) as u8,
+        mix_random_byte(r3, 0xAA, 1, 0x55),
+        mix_random_byte(r3, 0x55, 1, 0xAA),
+        mix_random_byte(r3 >> 8, 0xAA, 5, 0x55),
+        mix_random_byte(r3 >> 8, 0x55, 5, 0xAA),
     ]);
 
     result
@@ -317,7 +326,7 @@ fn generate_rc4_bb(params: &str, user_agent: &str, args: [u32; 3]) -> Vec<u8> {
         .as_millis() as i64;
 
     // 构建 b 数组
-    let mut b = vec![0u8; 73];
+    let mut b = [0u8; 73];
 
     b[8] = 3;
     // end_time 字节

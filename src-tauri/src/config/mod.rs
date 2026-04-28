@@ -160,27 +160,6 @@ impl AppConfig {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::AppConfig;
-
-    #[test]
-    fn deserializes_partial_config_with_defaults() {
-        let config: AppConfig = serde_json::from_str(
-            r#"{
-            "download_dir": "/tmp/downloads",
-            "cookie": "sessionid=test"
-        }"#,
-        )
-        .expect("partial config should deserialize");
-
-        assert_eq!(config.download_path, "/tmp/downloads");
-        assert_eq!(config.cookie, "sessionid=test");
-        assert_eq!(config.max_concurrent, 3);
-        assert_eq!(config.download_quality, "auto");
-    }
-}
-
 /// 抖音通用请求参数
 pub fn get_common_params() -> HashMap<String, String> {
     let mut params = HashMap::new();
@@ -251,4 +230,25 @@ pub fn get_common_headers(cookie: &str) -> HashMap<String, String> {
 /// User-Agent
 pub fn get_user_agent() -> &'static str {
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AppConfig;
+
+    #[test]
+    fn deserializes_partial_config_with_defaults() {
+        let config: AppConfig = serde_json::from_str(
+            r#"{
+            "download_dir": "/tmp/downloads",
+            "cookie": "sessionid=test"
+        }"#,
+        )
+        .expect("partial config should deserialize");
+
+        assert_eq!(config.download_path, "/tmp/downloads");
+        assert_eq!(config.cookie, "sessionid=test");
+        assert_eq!(config.max_concurrent, 3);
+        assert_eq!(config.download_quality, "auto");
+    }
 }

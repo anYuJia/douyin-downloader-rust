@@ -261,8 +261,9 @@ pub struct DownloadTask {
 }
 
 /// 媒体类型
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum MediaType {
+    #[default]
     Video,
     Image,
     LivePhoto,
@@ -270,27 +271,16 @@ pub enum MediaType {
     Audio,
 }
 
-impl Default for MediaType {
-    fn default() -> Self {
-        Self::Video
-    }
-}
-
 /// 下载状态
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum DownloadStatus {
+    #[default]
     Pending,
     Downloading,
     Completed,
     Failed,
     Cancelled,
     Paused,
-}
-
-impl Default for DownloadStatus {
-    fn default() -> Self {
-        Self::Pending
-    }
 }
 
 /// API 响应包装
@@ -328,7 +318,7 @@ pub struct SearchResult<T> {
 pub enum SearchUserResult {
     NeedVerify { verify_url: String },
     NotFound,
-    Single(UserInfo),
+    Single(Box<UserInfo>),
     Multiple(Vec<UserInfo>),
 }
 

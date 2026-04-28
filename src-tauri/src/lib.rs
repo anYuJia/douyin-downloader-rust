@@ -19,6 +19,7 @@ use downloader::{Downloader, DownloaderEvent};
 use history::HistoryManager;
 use media_utils::*;
 use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::{Emitter, Manager, State};
@@ -58,6 +59,12 @@ impl AppState {
             media_http_client,
             media_redirect_cache: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -653,7 +660,7 @@ async fn search_user(
         Ok(api::SearchUserResult::Single(user)) => Ok(serde_json::json!({
             "success": true,
             "type": "single",
-            "user": python_user_value(&user)
+            "user": python_user_value(user.as_ref())
         })),
         Ok(api::SearchUserResult::Multiple(users)) => Ok(serde_json::json!({
             "success": true,
@@ -1452,6 +1459,7 @@ async fn delete_history(state: State<'_, AppState>, aweme_id: String) -> Result<
 
 /// 添加历史记录
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 async fn add_history(
     state: State<'_, AppState>,
     aweme_id: String,
@@ -1481,31 +1489,89 @@ async fn add_history(
 
 // ==================== 文件操作 API ====================
 
+fn canonical_existing_file(raw_path: &str) -> Result<PathBuf, String> {
+    let trimmed = raw_path.trim();
+    if trimmed.is_empty() {
+        return Err("文件路径不能为空".to_string());
+    }
+
+    let path = Path::new(trimmed);
+    let canonical = path
+        .canonicalize()
+        .map_err(|_| "文件不存在或无法访问".to_string())?;
+
+    if !canonical.is_file() {
+        return Err("只能操作文件".to_string());
+    }
+
+    Ok(canonical)
+}
+
+async fn allowed_existing_file_path(
+    state: &State<'_, AppState>,
+    raw_path: &str,
+) -> Result<PathBuf, String> {
+    let target = canonical_existing_file(raw_path)?;
+
+    let download_path = {
+        let config = state.config.lock().await;
+        config.download_path.clone()
+    };
+
+    if !download_path.trim().is_empty() {
+        if let Ok(download_root) = Path::new(&download_path).canonicalize() {
+            if target.starts_with(download_root) {
+                return Ok(target);
+            }
+        }
+    }
+
+    let history_items = {
+        let history = state.history.lock().await;
+        history.get_all()
+    };
+
+    let is_history_file = history_items.iter().any(|item| {
+        Path::new(&item.file_path)
+            .canonicalize()
+            .map(|history_path| history_path == target)
+            .unwrap_or(false)
+    });
+
+    if is_history_file {
+        Ok(target)
+    } else {
+        Err("仅允许操作下载目录或下载历史中的文件".to_string())
+    }
+}
+
 /// 打开文件所在目录
 #[tauri::command]
-async fn open_file_location(path: String) -> Result<(), String> {
+async fn open_file_location(state: State<'_, AppState>, path: String) -> Result<(), String> {
     use std::process::Command;
+
+    let target = allowed_existing_file_path(&state, &path).await?;
 
     #[cfg(target_os = "macos")]
     Command::new("open")
         .arg("-R")
-        .arg(&path)
+        .arg(&target)
         .spawn()
         .map_err(|e| e.to_string())?;
 
     #[cfg(target_os = "windows")]
-    Command::new("explorer")
-        .args(["/select,", &path])
-        .spawn()
-        .map_err(|e| e.to_string())?;
+    {
+        let mut select_arg = std::ffi::OsString::from("/select,");
+        select_arg.push(&target);
+        Command::new("explorer")
+            .arg(select_arg)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
 
     #[cfg(target_os = "linux")]
     Command::new("xdg-open")
-        .arg(
-            std::path::Path::new(&path)
-                .parent()
-                .unwrap_or(std::path::Path::new(".")),
-        )
+        .arg(target.parent().unwrap_or(Path::new(".")))
         .spawn()
         .map_err(|e| e.to_string())?;
 
@@ -1514,14 +1580,21 @@ async fn open_file_location(path: String) -> Result<(), String> {
 
 /// 删除文件
 #[tauri::command]
-async fn delete_file(path: String) -> Result<(), String> {
-    std::fs::remove_file(&path).map_err(|e| e.to_string())
+async fn delete_file(state: State<'_, AppState>, path: String) -> Result<(), String> {
+    let target = allowed_existing_file_path(&state, &path).await?;
+    std::fs::remove_file(target).map_err(|e| e.to_string())
 }
 
 /// 获取应用版本号
 #[tauri::command]
 fn get_app_version(app_handle: tauri::AppHandle) -> String {
     app_handle.package_info().version.to_string()
+}
+
+/// 重启应用
+#[tauri::command]
+fn restart_app(app_handle: tauri::AppHandle) {
+    app_handle.request_restart();
 }
 
 /// 检查更新
@@ -1567,15 +1640,54 @@ async fn download_update(app_handle: tauri::AppHandle) -> Result<serde_json::Val
 
     match updater.check().await {
         Ok(Some(update)) => {
-            tauri::async_runtime::spawn(async move {
-                let _ = update
-                    .download_and_install(|_chunk, _content| {}, || {})
-                    .await;
-            });
-            Ok(serde_json::json!({
-                "success": true,
-                "message": "更新下载中，完成后将自动安装"
-            }))
+            let progress_app = app_handle.clone();
+            let finished_app = app_handle.clone();
+            let mut downloaded = 0u64;
+
+            match update
+                .download_and_install(
+                    move |chunk_len, content_len| {
+                        downloaded += chunk_len as u64;
+                        let progress = content_len
+                            .filter(|total| *total > 0)
+                            .map(|total| downloaded as f64 / total as f64 * 100.0);
+                        let _ = progress_app.emit(
+                            "update-download-progress",
+                            serde_json::json!({
+                                "downloaded": downloaded,
+                                "total": content_len,
+                                "progress": progress
+                            }),
+                        );
+                    },
+                    move || {
+                        let _ = finished_app.emit(
+                            "update-download-finished",
+                            serde_json::json!({ "success": true }),
+                        );
+                    },
+                )
+                .await
+            {
+                Ok(_) => Ok(serde_json::json!({
+                    "success": true,
+                    "message": "更新下载并安装完成"
+                })),
+                Err(e) => {
+                    log::error!("failed to download and install update: {}", e);
+                    let _ = app_handle.emit(
+                        "update-download-error",
+                        serde_json::json!({
+                            "success": false,
+                            "message": e.to_string()
+                        }),
+                    );
+                    Ok(serde_json::json!({
+                        "success": false,
+                        "message": format!("下载更新失败: {}", e)
+                    }))
+                }
+            }
         }
         Ok(None) => Ok(serde_json::json!({
             "success": false,
@@ -1585,46 +1697,6 @@ async fn download_update(app_handle: tauri::AppHandle) -> Result<serde_json::Val
             "success": false,
             "message": format!("下载更新失败: {}", e)
         })),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::media_utils::{download_media_type_from_payload, parse_download_media_items};
-
-    #[test]
-    fn parses_flat_download_media_items() {
-        let payload = serde_json::json!({
-            "aweme_id": "123",
-            "desc": "test",
-            "raw_media_type": "video",
-            "media_type": "video",
-            "media_urls": [{ "type": "video", "url": "https://example.com/test.mp4" }],
-        });
-
-        let parsed = parse_download_media_items(&payload, "video");
-
-        assert_eq!(parsed.len(), 1);
-        assert_eq!(parsed[0].r#type, "video");
-        assert_eq!(parsed[0].url, "https://example.com/test.mp4");
-    }
-
-    #[test]
-    fn resolves_download_media_type_from_string_and_numeric_payloads() {
-        assert_eq!(
-            download_media_type_from_payload(
-                &serde_json::json!({ "raw_media_type": "live_photo" })
-            ),
-            "live_photo"
-        );
-        assert_eq!(
-            download_media_type_from_payload(&serde_json::json!({ "raw_media_type": 1 })),
-            "image"
-        );
-        assert_eq!(
-            download_media_type_from_payload(&serde_json::json!({ "media_type": "mixed" })),
-            "mixed"
-        );
     }
 }
 
@@ -1675,6 +1747,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_app_version,
+            restart_app,
             check_update,
             download_update,
             init_client,
@@ -1716,4 +1789,44 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::media_utils::{download_media_type_from_payload, parse_download_media_items};
+
+    #[test]
+    fn parses_flat_download_media_items() {
+        let payload = serde_json::json!({
+            "aweme_id": "123",
+            "desc": "test",
+            "raw_media_type": "video",
+            "media_type": "video",
+            "media_urls": [{ "type": "video", "url": "https://example.com/test.mp4" }],
+        });
+
+        let parsed = parse_download_media_items(&payload, "video");
+
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].r#type, "video");
+        assert_eq!(parsed[0].url, "https://example.com/test.mp4");
+    }
+
+    #[test]
+    fn resolves_download_media_type_from_string_and_numeric_payloads() {
+        assert_eq!(
+            download_media_type_from_payload(
+                &serde_json::json!({ "raw_media_type": "live_photo" })
+            ),
+            "live_photo"
+        );
+        assert_eq!(
+            download_media_type_from_payload(&serde_json::json!({ "raw_media_type": 1 })),
+            "image"
+        );
+        assert_eq!(
+            download_media_type_from_payload(&serde_json::json!({ "media_type": "mixed" })),
+            "mixed"
+        );
+    }
 }

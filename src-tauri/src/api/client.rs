@@ -981,10 +981,10 @@ impl DouyinClient {
                 return Ok(SearchUserResult::NotFound);
             }
 
-            return Ok(SearchUserResult::Single(UserInfo {
+            return Ok(SearchUserResult::Single(Box::new(UserInfo {
                 sec_uid: user_id,
                 ..Default::default()
-            }));
+            })));
         }
 
         let precise_search =
@@ -1077,9 +1077,9 @@ impl DouyinClient {
         }
 
         if precise_search {
-            Ok(SearchUserResult::Single(
+            Ok(SearchUserResult::Single(Box::new(
                 users.into_iter().next().unwrap_or_default(),
-            ))
+            )))
         } else {
             Ok(SearchUserResult::Multiple(users))
         }

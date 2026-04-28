@@ -127,6 +127,7 @@ impl Downloader {
     }
 
     /// 添加媒体组下载任务
+    #[allow(clippy::too_many_arguments)]
     pub async fn add_media_task(
         &self,
         aweme_id: String,
@@ -1024,6 +1025,7 @@ impl Downloader {
     }
 
     /// 下载单个视频
+    #[allow(clippy::too_many_arguments)]
     async fn download_single_video(
         client: reqwest::Client,
         config: AppConfig,
@@ -1334,7 +1336,7 @@ impl Downloader {
 
         let mut download_handles = Vec::new();
 
-        for (_index, video) in videos.into_iter().enumerate() {
+        for video in videos {
             // 检查取消
             if *self
                 .cancel_tokens
@@ -1346,11 +1348,9 @@ impl Downloader {
                 break;
             }
 
-            let permit = semaphore.clone().acquire_owned().await.ok();
-            if permit.is_none() {
+            let Ok(permit) = semaphore.clone().acquire_owned().await else {
                 break;
-            }
-            let permit = permit.unwrap();
+            };
 
             // 检查是否已下载（去重）
             let base_path = PathBuf::from(&self.config.download_path);
@@ -1537,6 +1537,7 @@ impl Downloader {
     }
 
     /// 单个视频下载（带批量进度）
+    #[allow(clippy::too_many_arguments)]
     async fn download_single_with_progress(
         client: reqwest::Client,
         config: AppConfig,
