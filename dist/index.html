@@ -480,9 +480,54 @@
             <button class="btn btn-primary w-100" id="save-config-btn">
                 <i class="bi bi-check-lg"></i> 保存设置
             </button>
+
+            <hr class="my-4">
+            <div class="mb-3">
+                <label class="form-label d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-info-circle"></i> 关于</span>
+                    <span class="text-muted small" id="app-version-text">版本: --</span>
+                </label>
+                <button class="btn btn-outline-secondary w-100" id="check-update-btn">
+                    <i class="bi bi-arrow-repeat" id="check-update-icon"></i> 检查更新
+                </button>
+                <div id="update-status" class="mt-2 small" style="display:none;"></div>
+            </div>
         </div>
     </div>
     <div id="settings-overlay" class="settings-overlay"></div>
+
+    <!-- Update Available Modal -->
+    <div class="modal fade" id="updateModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-cloud-arrow-down"></i> 发现新版本</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2">当前版本: <strong id="update-current-version"></strong></p>
+                    <p class="mb-2">最新版本: <strong id="update-new-version"></strong></p>
+                    <div id="update-release-notes" class="border rounded p-2 bg-light small" style="max-height: 200px; overflow-y: auto;"></div>
+                    <div id="update-progress-area" class="mt-3" style="display:none;">
+                        <label class="form-label small">下载进度</label>
+                        <div class="progress" style="height: 8px;">
+                            <div id="update-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                        </div>
+                        <small id="update-progress-text" class="text-muted"></small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="update-dismiss-btn">稍后再说</button>
+                    <button type="button" class="btn btn-primary" id="update-download-btn">
+                        <i class="bi bi-download"></i> 立即更新
+                    </button>
+                    <button type="button" class="btn btn-success" id="update-restart-btn" style="display:none;">
+                        <i class="bi bi-arrow-clockwise"></i> 重启应用
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Bottom Bar (downloads + logs) -->
     <div id="bottom-bar-overlay" class="bottom-bar-overlay"></div>

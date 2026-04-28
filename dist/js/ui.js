@@ -1551,3 +1551,195 @@ function playerSeek(e) {
 // DEBOUNCED FILTER
 // ═══════════════════════════════════════════════
 const debouncedFilterStorageVideos = debounce(filterStorageVideos, 300);
+
+// ═══════════════════════════════════════════════
+// AUTO-UPDATE FUNCTIONALITY
+// ═══════════════════════════════════════════════
+function initUpdateChecker() {
+    fetch('/api/get_app_version')
+        .then(function(response) { return response.json(); })
+        .then(function(version) {
+            const versionEl = document.getElementById('app-version-text');
+            if (versionEl) {
+                versionEl.textContent = '当前版本: v' + version;
+            }
+        })
+        .catch(function(error) {
+            console.error('Failed to get app version:', error);
+        });
+
+    const checkBtn = document.getElementById('check-update-btn');
+    if (checkBtn) {
+        checkBtn.addEventListener('click', function() {
+            checkForUpdates(true);
+        });
+    }
+
+    const downloadBtn = document.getElementById('update-download-btn');
+    if (downloadBtn) {
+        downloadBtn.addEventListener('click', function() {
+            downloadAndInstallUpdate();
+        });
+    }
+
+    setTimeout(function() {
+        checkForUpdates(false);
+    }, 3000);
+}
+
+function checkForUpdates(showNoUpdateToast) {
+    const statusEl = document.getElementById('update-status');
+    const modal = new bootstrap.Modal(document.getElementById('updateModal'));
+
+    if (statusEl) {
+        statusEl.textContent = '正在检查更新...';
+        statusEl.className = 'text-info';
+    }
+
+    fetch('/api/check_update')
+        .then(function(response) { return response.json(); })
+        .then(function(result) {
+            if (result.success && result.has_update) {
+                const versionEl = document.getElementById('update-version');
+                const notesEl = document.getElementById('update-notes');
+                const dateEl = document.getElementById('update-date');
+                const progressGroup = document.getElementById('update-progress-group');
+                const downloadBtn = document.getElementById('update-download-btn');
+                const restartBtn = document.getElementById('update-restart-btn');
+
+                if (versionEl) {
+                    versionEl.textContent = 'v' + (result.current_version || '') + ' → v' + (result.version || '');
+                }
+                if (notesEl) {
+                    notesEl.textContent = result.notes || '暂无更新说明';
+                }
+                if (dateEl) {
+                    dateEl.textContent = result.date ? new Date(result.date).toLocaleDateString() : '';
+                }
+                if (progressGroup) {
+                    progressGroup.style.display = 'none';
+                }
+                if (downloadBtn) {
+                    downloadBtn.style.display = 'inline-block';
+                }
+                if (restartBtn) {
+                    restartBtn.style.display = 'none';
+                }
+
+                modal.show();
+            } else if (result.success && !result.has_update) {
+                if (statusEl) {
+                    statusEl.textContent = '当前已是最新版本';
+                    statusEl.className = 'text-success';
+                }
+                if (showNoUpdateToast) {
+                    showToast('当前已是最新版本', 'success');
+                }
+            } else {
+                if (statusEl) {
+                    statusEl.textContent = '检查失败: ' + (result.message || '未知错误');
+                    statusEl.className = 'text-danger';
+                }
+                if (showNoUpdateToast) {
+                    showToast('检查更新失败: ' + (result.message || '未知错误'), 'error');
+                }
+            }
+        })
+        .catch(function(error) {
+            console.error('Check update failed:', error);
+            if (statusEl) {
+                statusEl.textContent = '检查失败';
+                statusEl.className = 'text-danger';
+            }
+            if (showNoUpdateToast) {
+                showToast('检查更新失败', 'error');
+            }
+        });
+}
+
+function downloadAndInstallUpdate() {
+    const downloadBtn = document.getElementById('update-download-btn');
+    const restartBtn = document.getElementById('update-restart-btn');
+    const progressBar = document.getElementById('update-progress-bar');
+    const progressGroup = document.getElementById('update-progress-group');
+    const statusEl = document.getElementById('update-status');
+
+    if (downloadBtn) {
+        downloadBtn.disabled = true;
+        downloadBtn.textContent = '下载中...';
+    }
+    if (progressGroup) {
+        progressGroup.style.display = 'block';
+    }
+    if (progressBar) {
+        progressBar.style.width = '0%';
+    }
+    if (statusEl) {
+        statusEl.textContent = '正在下载更新...';
+        statusEl.className = 'text-info';
+    }
+
+    let progress = 0;
+    const progressInterval = setInterval(function() {
+        progress += Math.random() * 10;
+        if (progress > 90) progress = 90;
+        if (progressBar) {
+            progressBar.style.width = Math.round(progress) + '%';
+        }
+    }, 300);
+
+    fetch('/api/download_update')
+        .then(function(response) { return response.json(); })
+        .then(function(result) {
+            clearInterval(progressInterval);
+            if (progressBar) {
+                progressBar.style.width = '100%';
+            }
+
+            if (result.success) {
+                if (statusEl) {
+                    statusEl.textContent = '下载完成，即将安装...';
+                    statusEl.className = 'text-success';
+                }
+                if (downloadBtn) {
+                    downloadBtn.style.display = 'none';
+                }
+                if (restartBtn) {
+                    restartBtn.style.display = 'inline-block';
+                }
+                showToast('更新包已下载完成，安装后将自动重启应用', 'success');
+            } else {
+                if (statusEl) {
+                    statusEl.textContent = '下载失败: ' + (result.message || '未知错误');
+                    statusEl.className = 'text-danger';
+                }
+                if (downloadBtn) {
+                    downloadBtn.disabled = false;
+                    downloadBtn.textContent = '下载并安装';
+                }
+                showToast('下载更新失败: ' + (result.message || '未知错误'), 'error');
+            }
+        })
+        .catch(function(error) {
+            clearInterval(progressInterval);
+            console.error('Download update failed:', error);
+            if (progressBar) {
+                progressBar.style.width = '100%';
+            }
+            if (statusEl) {
+                statusEl.textContent = '下载失败';
+                statusEl.className = 'text-danger';
+            }
+            if (downloadBtn) {
+                downloadBtn.disabled = false;
+                downloadBtn.textContent = '下载并安装';
+            }
+            showToast('下载更新失败', 'error');
+        });
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initUpdateChecker);
+} else {
+    initUpdateChecker();
+}

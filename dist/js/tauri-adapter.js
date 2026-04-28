@@ -818,6 +818,18 @@
             });
         }
 
+        if (path === '/api/get_app_version') {
+            return invoke('get_app_version');
+        }
+
+        if (path === '/api/check_update') {
+            return invoke('check_update');
+        }
+
+        if (path === '/api/download_update') {
+            return invoke('download_update');
+        }
+
         if (path === '/api/download_music') {
             return { success: false, message: '请直接使用媒体原始地址下载音乐。' };
         }

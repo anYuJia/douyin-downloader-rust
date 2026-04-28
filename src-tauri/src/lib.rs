@@ -1518,6 +1518,74 @@ async fn delete_file(path: String) -> Result<(), String> {
     std::fs::remove_file(&path).map_err(|e| e.to_string())
 }
 
+/// 获取应用版本号
+#[tauri::command]
+fn get_app_version(app_handle: tauri::AppHandle) -> String {
+    app_handle.package_info().version.to_string()
+}
+
+/// 检查更新
+#[tauri::command]
+async fn check_update(app_handle: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    use tauri_plugin_updater::UpdaterExt;
+
+    let updater = app_handle
+        .updater_builder()
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    match updater.check().await {
+        Ok(Some(update)) => Ok(serde_json::json!({
+            "success": true,
+            "has_update": true,
+            "version": update.version,
+            "current_version": update.current_version,
+            "notes": update.body.unwrap_or_else(|| "无更新说明".to_string()),
+            "date": update.date.map(|d| d.to_string()),
+            "download_url": ""
+        })),
+        Ok(None) => Ok(serde_json::json!({
+            "success": true,
+            "has_update": false
+        })),
+        Err(e) => Ok(serde_json::json!({
+            "success": false,
+            "message": format!("检查更新失败: {}", e)
+        })),
+    }
+}
+
+/// 下载并安装更新
+#[tauri::command]
+async fn download_update(app_handle: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    use tauri_plugin_updater::UpdaterExt;
+
+    let updater = app_handle
+        .updater_builder()
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    match updater.check().await {
+        Ok(Some(update)) => {
+            tauri::async_runtime::spawn(async move {
+                let _ = update.download_and_install(|_chunk, _content| {}, || {}).await;
+            });
+            Ok(serde_json::json!({
+                "success": true,
+                "message": "更新下载中，完成后将自动安装"
+            }))
+        }
+        Ok(None) => Ok(serde_json::json!({
+            "success": false,
+            "message": "没有可用更新"
+        })),
+        Err(e) => Ok(serde_json::json!({
+            "success": false,
+            "message": format!("下载更新失败: {}", e)
+        })),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::media_utils::{download_media_type_from_payload, parse_download_media_items};
@@ -1568,6 +1636,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let log_level = if cfg!(debug_assertions) {
                 log::LevelFilter::Info
@@ -1603,6 +1672,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            get_app_version,
+            check_update,
+            download_update,
             init_client,
             get_config,
             save_config,
