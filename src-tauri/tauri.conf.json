@@ -56,7 +56,7 @@
     },
     "updater": {
       "endpoints": [
-        "https://github.com/anYuJia/douyin-downloader-rust/releases/latest/download/latest.json"
+        "https://github.com/anYuJia/douyin-downloader-rust/releases/latest/download/{{target}}.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEUxMEM4M0FENkEyM0EwOUIKUldTYm9DTnFyWU1NNFk1VVpmQ09RcjRrMXA5UnVBdmxFNm5WN2FsOEd4aTQzc1pmTmJlS1o3YXEK",
       "dialog": false
