@@ -1568,7 +1568,9 @@ async fn download_update(app_handle: tauri::AppHandle) -> Result<serde_json::Val
     match updater.check().await {
         Ok(Some(update)) => {
             tauri::async_runtime::spawn(async move {
-                let _ = update.download_and_install(|_chunk, _content| {}, || {}).await;
+                let _ = update
+                    .download_and_install(|_chunk, _content| {}, || {})
+                    .await;
             });
             Ok(serde_json::json!({
                 "success": true,
