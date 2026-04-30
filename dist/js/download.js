@@ -774,9 +774,13 @@ function removeTask(taskId) {
 function updateActiveTasksCount() {
     const count = Object.keys(downloadTasks).length;
     const countElement = document.getElementById('active-tasks-count');
+    const bottomBar = document.getElementById('bottom-bar');
     if (countElement) {
         countElement.textContent = count;
         countElement.className = count > 0 ? 'badge bg-primary ms-1' : 'badge bg-secondary ms-1';
+    }
+    if (bottomBar) {
+        bottomBar.classList.toggle('has-active-tasks', count > 0);
     }
 }
 

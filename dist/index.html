@@ -23,7 +23,8 @@
 
             <!-- Left: Logo -->
             <a class="navbar-brand" href="#">
-                <i class="bi bi-play-circle-fill"></i> DY
+                <i class="bi bi-play-circle-fill"></i>
+                <span>DY</span>
             </a>
 
             <!-- Center: Search + Link input -->
@@ -243,7 +244,7 @@
                             <i class="bi bi-grid-3x3-gap"></i> 作品列表
                         </div>
                         <div class="section-panel-actions">
-                            <span id="videoCount" class="badge bg-light text-dark">0 个作品</span>
+                            <span id="videoCount" class="badge section-count-badge">0 个作品</span>
                             <button id="selectModeBtn" onclick="toggleSelectMode()" class="btn btn-outline-light btn-sm">
                                 <i class="bi bi-check2-square"></i> 多选
                             </button>
@@ -275,7 +276,7 @@
                             <i class="bi bi-heart-fill"></i> 点赞视频列表
                         </div>
                         <div class="section-panel-actions">
-                            <span id="likedVideoCount" class="badge bg-light text-dark">0 个视频</span>
+                            <span id="likedVideoCount" class="badge section-count-badge">0 个视频</span>
                             <button onclick="downloadAllLikedVideos()" class="btn btn-outline-light btn-sm">
                                 <i class="bi bi-download"></i> 下载全部
                             </button>
@@ -298,7 +299,7 @@
                             <i class="bi bi-people-fill"></i> 点赞作者列表
                         </div>
                         <div class="section-panel-actions">
-                            <span id="likedAuthorCount" class="badge bg-light text-dark">0 个作者</span>
+                            <span id="likedAuthorCount" class="badge section-count-badge">0 个作者</span>
                             <button type="button" class="btn btn-outline-light btn-sm" onclick="downloadAllLikedAuthors()">
                                 <i class="bi bi-download"></i> 下载全部作者视频
                             </button>
@@ -321,7 +322,7 @@
                             <i class="bi bi-folder2-open"></i> 我的下载
                         </div>
                         <div class="section-panel-actions">
-                            <span id="myDownloadsCount" class="badge bg-light text-dark">0 个文件</span>
+                            <span id="myDownloadsCount" class="badge section-count-badge">0 个文件</span>
                             <button class="btn btn-outline-light btn-sm" onclick="openMyDownloadsDirectory()" title="打开下载目录">
                                 <i class="bi bi-folder2-open"></i> 打开目录
                             </button>
@@ -510,7 +511,7 @@
                 <div class="modal-body">
                     <p class="mb-2">当前版本: <strong id="update-current-version"></strong></p>
                     <p class="mb-2">最新版本: <strong id="update-new-version"></strong></p>
-                    <div id="update-release-notes" class="border rounded p-2 bg-light small" style="max-height: 200px; overflow-y: auto;"></div>
+                    <div id="update-release-notes" class="update-release-notes small" style="max-height: 200px; overflow-y: auto;"></div>
                     <div id="update-progress-area" class="mt-3" style="display:none;">
                         <label class="form-label small">下载进度</label>
                         <div class="progress" style="height: 8px;">
