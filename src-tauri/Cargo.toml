@@ -1,6 +1,6 @@
 [package]
 name = "douyin-downloader"
-version = "0.0.5"
+version = "0.0.6"
 description = "抖音视频下载器"
 authors = ["you"]
 license = ""
