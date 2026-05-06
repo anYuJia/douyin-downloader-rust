@@ -1,0 +1,34 @@
+{
+  "version": "0.0.9",
+  "description": "Desktop Douyin video downloader built with Rust and Tauri.",
+  "homepage": "https://github.com/anYuJia/douyin-downloader-rust",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/anYuJia/douyin-downloader-rust/releases/download/v0.0.9/Douyin-Downloader_0.0.9_x64_portable.exe#/Douyin-Downloader.exe",
+      "hash": "530f3da375762d59219c25ea1fcc9de5f255725842d715087bc3b0d71ac4bc1e"
+    }
+  },
+  "bin": [
+    [
+      "Douyin-Downloader.exe",
+      "douyin-downloader"
+    ]
+  ],
+  "shortcuts": [
+    [
+      "Douyin-Downloader.exe",
+      "Douyin Downloader"
+    ]
+  ],
+  "checkver": {
+    "github": "https://github.com/anYuJia/douyin-downloader-rust"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/anYuJia/douyin-downloader-rust/releases/download/v$version/Douyin-Downloader_$version_x64_portable.exe#/Douyin-Downloader.exe"
+      }
+    }
+  }
+}

@@ -23,7 +23,8 @@
 
             <!-- Left: Logo -->
             <a class="navbar-brand" href="#">
-                <i class="bi bi-play-circle-fill"></i> DY
+                <i class="bi bi-play-circle-fill"></i>
+                <span>DY</span>
             </a>
 
             <!-- Center: Search + Link input -->
@@ -243,7 +244,7 @@
                             <i class="bi bi-grid-3x3-gap"></i> 作品列表
                         </div>
                         <div class="section-panel-actions">
-                            <span id="videoCount" class="badge bg-light text-dark">0 个作品</span>
+                            <span id="videoCount" class="badge section-count-badge">0 个作品</span>
                             <button id="selectModeBtn" onclick="toggleSelectMode()" class="btn btn-outline-light btn-sm">
                                 <i class="bi bi-check2-square"></i> 多选
                             </button>
@@ -275,7 +276,7 @@
                             <i class="bi bi-heart-fill"></i> 点赞视频列表
                         </div>
                         <div class="section-panel-actions">
-                            <span id="likedVideoCount" class="badge bg-light text-dark">0 个视频</span>
+                            <span id="likedVideoCount" class="badge section-count-badge">0 个视频</span>
                             <button onclick="downloadAllLikedVideos()" class="btn btn-outline-light btn-sm">
                                 <i class="bi bi-download"></i> 下载全部
                             </button>
@@ -298,7 +299,7 @@
                             <i class="bi bi-people-fill"></i> 点赞作者列表
                         </div>
                         <div class="section-panel-actions">
-                            <span id="likedAuthorCount" class="badge bg-light text-dark">0 个作者</span>
+                            <span id="likedAuthorCount" class="badge section-count-badge">0 个作者</span>
                             <button type="button" class="btn btn-outline-light btn-sm" onclick="downloadAllLikedAuthors()">
                                 <i class="bi bi-download"></i> 下载全部作者视频
                             </button>
@@ -321,7 +322,7 @@
                             <i class="bi bi-folder2-open"></i> 我的下载
                         </div>
                         <div class="section-panel-actions">
-                            <span id="myDownloadsCount" class="badge bg-light text-dark">0 个文件</span>
+                            <span id="myDownloadsCount" class="badge section-count-badge">0 个文件</span>
                             <button class="btn btn-outline-light btn-sm" onclick="openMyDownloadsDirectory()" title="打开下载目录">
                                 <i class="bi bi-folder2-open"></i> 打开目录
                             </button>
@@ -335,8 +336,8 @@
                     </div>
                     <div class="section-panel-body">
                         <!-- Filter Bar -->
-                        <div class="row mb-3 g-2">
-                            <div class="col-md-4">
+                        <div class="row mb-3 g-2 align-items-center my-downloads-toolbar">
+                            <div class="col-lg-5 col-md-12 my-downloads-toolbar__search">
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text"><i class="bi bi-search"></i></span>
                                     <input type="text" class="form-control" id="myDownloadsSearch" placeholder="搜索文件名、作者、路径，支持 author: / ext:" oninput="filterMyDownloads()">
@@ -345,7 +346,7 @@
                                     </button>
                                 </div>
                             </div>
-                            <div class="col-md-2">
+                            <div class="col-lg-2 col-md-4 col-6">
                                 <select class="form-select form-select-sm" id="myDownloadsTypeFilter" onchange="filterMyDownloads()">
                                     <option value="all">全部类型</option>
                                     <option value="video">视频</option>
@@ -353,7 +354,7 @@
                                     <option value="audio">音频</option>
                                 </select>
                             </div>
-                            <div class="col-md-2">
+                            <div class="col-lg-2 col-md-4 col-6">
                                 <select class="form-select form-select-sm" id="myDownloadsSort" onchange="filterMyDownloads()">
                                     <option value="date_desc">最新优先</option>
                                     <option value="date_asc">最早优先</option>
@@ -363,8 +364,8 @@
                                     <option value="name_desc">名称 Z-A</option>
                                 </select>
                             </div>
-                            <div class="col-md-4">
-                                <div class="d-flex gap-2 align-items-center">
+                            <div class="col-lg-3 col-md-4 col-12">
+                                <div class="my-downloads-batch-actions">
                                     <div class="form-check form-check-inline mb-0">
                                         <input class="form-check-input" type="checkbox" id="myDownloadsSelectAll" onchange="toggleMyDownloadsSelectAll()">
                                         <label class="form-check-label" for="myDownloadsSelectAll">全选</label>
@@ -510,7 +511,7 @@
                 <div class="modal-body">
                     <p class="mb-2">当前版本: <strong id="update-current-version"></strong></p>
                     <p class="mb-2">最新版本: <strong id="update-new-version"></strong></p>
-                    <div id="update-release-notes" class="border rounded p-2 bg-light small" style="max-height: 200px; overflow-y: auto;"></div>
+                    <div id="update-release-notes" class="update-release-notes small" style="max-height: 200px; overflow-y: auto;"></div>
                     <div id="update-progress-area" class="mt-3" style="display:none;">
                         <label class="form-label small">下载进度</label>
                         <div class="progress" style="height: 8px;">

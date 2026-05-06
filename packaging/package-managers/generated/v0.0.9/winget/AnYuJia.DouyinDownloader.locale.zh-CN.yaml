@@ -1,0 +1,11 @@
+PackageIdentifier: AnYuJia.DouyinDownloader
+PackageVersion: 0.0.9
+PackageLocale: zh-CN
+Publisher: anYuJia
+PackageName: Douyin Downloader
+ShortDescription: Rust / Tauri 桌面版抖音下载工具。
+Description: 支持用户检索、批量下载、推荐视频浏览、点赞列表获取与实时下载进度。
+License: MIT
+PackageUrl: https://github.com/anYuJia/douyin-downloader-rust
+ManifestType: defaultLocale
+ManifestVersion: 1.9.0

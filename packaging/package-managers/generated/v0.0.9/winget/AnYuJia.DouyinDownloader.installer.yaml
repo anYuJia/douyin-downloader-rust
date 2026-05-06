@@ -1,0 +1,11 @@
+PackageIdentifier: AnYuJia.DouyinDownloader
+PackageVersion: 0.0.9
+InstallerLocale: zh-CN
+MinimumOSVersion: 10.0.17763.0
+Installers:
+  - Architecture: x64
+    InstallerType: nullsoft
+    InstallerUrl: https://github.com/anYuJia/douyin-downloader-rust/releases/download/v0.0.9/Douyin.Downloader_0.0.9_x64-setup.exe
+    InstallerSha256: 56AC5A4B37A0FACF6B229CDB1BC2CFE435A781EF68FE9CFCA4E5599881D5BE1E
+ManifestType: installer
+ManifestVersion: 1.9.0

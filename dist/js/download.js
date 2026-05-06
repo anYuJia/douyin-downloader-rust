@@ -696,7 +696,7 @@ function cancelTask(taskId) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ task_id: taskId })
         }).then(res => res.json()).then(data => {
-            console.log('Cancellation result:', data);
+            _log('Cancellation result:', data);
         }).catch(err => console.error('Cancel error:', err));
 
         updateTaskStatus(taskId, 'cancelled', '已取消');
@@ -723,7 +723,7 @@ async function cancelDownloadTask(taskId) {
             body: JSON.stringify({ task_id: taskId })
         });
         const result = await response.json();
-        console.log('Download cancellation requested:', result);
+        _log('Download cancellation requested:', result);
 
         // 等待一小段时间让后端处理取消
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -774,9 +774,13 @@ function removeTask(taskId) {
 function updateActiveTasksCount() {
     const count = Object.keys(downloadTasks).length;
     const countElement = document.getElementById('active-tasks-count');
+    const bottomBar = document.getElementById('bottom-bar');
     if (countElement) {
         countElement.textContent = count;
         countElement.className = count > 0 ? 'badge bg-primary ms-1' : 'badge bg-secondary ms-1';
+    }
+    if (bottomBar) {
+        bottomBar.classList.toggle('has-active-tasks', count > 0);
     }
 }
 
