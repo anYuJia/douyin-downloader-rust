@@ -7,6 +7,40 @@ on:
   pull_request:
 
 jobs:
+  frontend-static-checks:
+    name: Frontend Static Checks
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check JavaScript syntax
+        run: |
+          set -euo pipefail
+          for file in dist/js/*.js; do
+            node --check "$file"
+          done
+
+      - name: Check CSS braces
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const css = fs.readFileSync('dist/css/app.css', 'utf8');
+          let depth = 0;
+          for (let i = 0; i < css.length; i += 1) {
+            const ch = css[i];
+            if (ch === '{') depth += 1;
+            if (ch === '}') depth -= 1;
+            if (depth < 0) {
+              throw new Error(`Unexpected closing brace at offset ${i}`);
+            }
+          }
+          if (depth !== 0) {
+            throw new Error(`Unbalanced CSS braces: depth=${depth}`);
+          }
+          NODE
+
   rust-checks:
     name: Rust Checks
     runs-on: ubuntu-22.04
