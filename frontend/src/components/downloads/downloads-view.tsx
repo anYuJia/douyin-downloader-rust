@@ -82,12 +82,13 @@ export function DownloadsView() {
     void syncTasks();
   }, [syncTasks]);
 
-  const loadDiskFiles = useCallback(async () => {
+  const loadDiskFiles = useCallback(async (forceRefresh = false) => {
     setDiskLoading(true);
     try {
       const page = await listDownloadFilesPage({
         offset: (filePage - 1) * filePageSize,
         limit: filePageSize,
+        forceRefresh,
       });
       setDiskFiles(page.items);
       setDiskTotal(page.total);
@@ -105,7 +106,7 @@ export function DownloadsView() {
   const handleRefresh = useCallback(() => {
     void syncTasks();
     void loadHistory();
-    void loadDiskFiles();
+    void loadDiskFiles(true);
   }, [syncTasks, loadHistory, loadDiskFiles]);
 
   const handleOpenDir = useCallback(() => {

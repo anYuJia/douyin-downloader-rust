@@ -934,20 +934,22 @@ export interface DownloadFilesResult {
   latest: HistoryItem | null;
 }
 
-export async function listDownloadFiles(options?: { offset?: number; limit?: number }): Promise<HistoryItem[]> {
+export async function listDownloadFiles(options?: { offset?: number; limit?: number; forceRefresh?: boolean }): Promise<HistoryItem[]> {
   const result = await invoke<{ success: boolean; items?: unknown[] }>("list_download_files", {
     offset: options?.offset,
     limit: options?.limit,
+    forceRefresh: options?.forceRefresh,
   });
   return (result.items || []).map(normalizeHistoryItem).filter(Boolean) as HistoryItem[];
 }
 
-export async function listDownloadFilesPage(options: { offset?: number; limit?: number } = {}): Promise<DownloadFilesResult> {
+export async function listDownloadFilesPage(options: { offset?: number; limit?: number; forceRefresh?: boolean } = {}): Promise<DownloadFilesResult> {
   const result = await invoke<{ success: boolean; items?: unknown[]; total?: number; total_size?: number; latest?: unknown }>(
     "list_download_files",
     {
       offset: options.offset,
       limit: options.limit,
+      forceRefresh: options.forceRefresh,
     }
   );
   return {

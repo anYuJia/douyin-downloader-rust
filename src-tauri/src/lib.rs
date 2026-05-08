@@ -24,6 +24,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager, State};
 use tokio::sync::{mpsc, Mutex};
 use url::Url;
@@ -39,6 +40,15 @@ pub struct AppState {
     pub(crate) cookie_login: Arc<Mutex<Option<CookieLoginSession>>>,
     pub(crate) media_http_client: reqwest::Client,
     pub(crate) media_redirect_cache: Arc<Mutex<HashMap<String, String>>>,
+    pub(crate) download_file_index: Arc<Mutex<Option<DownloadFileIndexCache>>>,
+}
+
+#[derive(Clone)]
+pub(crate) struct DownloadFileIndexCache {
+    directory: PathBuf,
+    scanned_at: Instant,
+    items: Vec<DownloadFileEntry>,
+    total_size: u64,
 }
 
 impl AppState {
@@ -60,6 +70,7 @@ impl AppState {
             cookie_login: Arc::new(Mutex::new(None)),
             media_http_client,
             media_redirect_cache: Arc::new(Mutex::new(HashMap::new())),
+            download_file_index: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -1502,6 +1513,8 @@ struct DownloadFileEntry {
     media_type: String,
 }
 
+const DOWNLOAD_FILE_INDEX_TTL: Duration = Duration::from_secs(5);
+
 fn is_hidden_download_path(path: &Path) -> bool {
     path.file_name()
         .and_then(|value| value.to_str())
@@ -1596,25 +1609,36 @@ async fn list_download_files(
     state: State<'_, AppState>,
     offset: Option<usize>,
     limit: Option<usize>,
+    force_refresh: Option<bool>,
 ) -> Result<serde_json::Value, String> {
     let target = configured_download_directory(&state).await?;
-    let (items, total, total_size, latest) = tokio::task::spawn_blocking(move || {
-        let mut items = Vec::new();
-        scan_download_directory_entries(&target, &mut items)?;
-        items.sort_by_key(|item| std::cmp::Reverse(item.timestamp));
-        let total = items.len();
-        let total_size = items.iter().map(|item| item.size).sum::<u64>();
-        let latest = items.first().cloned();
-        let page_items = match (offset, limit) {
-            (Some(offset), Some(limit)) => items.into_iter().skip(offset).take(limit).collect(),
-            (Some(offset), None) => items.into_iter().skip(offset).collect(),
-            (None, Some(limit)) => items.into_iter().take(limit).collect(),
-            (None, None) => items,
-        };
-        Ok::<_, String>((page_items, total, total_size, latest))
-    })
-    .await
-    .map_err(|error| format!("扫描下载目录任务失败: {error}"))??;
+    let use_cache = !force_refresh.unwrap_or(false);
+    let cached_index = if use_cache {
+        state.download_file_index.lock().await.clone()
+    } else {
+        None
+    };
+
+    let index = if let Some(cache) = cached_index {
+        if cache.directory == target && cache.scanned_at.elapsed() <= DOWNLOAD_FILE_INDEX_TTL {
+            cache
+        } else {
+            build_download_file_index(target, state.download_file_index.clone()).await?
+        }
+    } else {
+        build_download_file_index(target, state.download_file_index.clone()).await?
+    };
+
+    let total = index.items.len();
+    let total_size = index.total_size;
+    let latest = index.items.first().cloned();
+    let items = match (offset, limit) {
+        (Some(offset), Some(limit)) => index.items.into_iter().skip(offset).take(limit).collect(),
+        (Some(offset), None) => index.items.into_iter().skip(offset).collect(),
+        (None, Some(limit)) => index.items.into_iter().take(limit).collect(),
+        (None, None) => index.items,
+    };
+
     Ok(serde_json::json!({
         "success": true,
         "items": items,
@@ -1622,6 +1646,28 @@ async fn list_download_files(
         "total_size": total_size,
         "latest": latest
     }))
+}
+
+async fn build_download_file_index(
+    target: PathBuf,
+    cache_store: Arc<Mutex<Option<DownloadFileIndexCache>>>,
+) -> Result<DownloadFileIndexCache, String> {
+    let cache = tokio::task::spawn_blocking(move || {
+        let mut items = Vec::new();
+        scan_download_directory_entries(&target, &mut items)?;
+        items.sort_by_key(|item| std::cmp::Reverse(item.timestamp));
+        let total_size = items.iter().map(|item| item.size).sum::<u64>();
+        Ok::<_, String>(DownloadFileIndexCache {
+            directory: target,
+            scanned_at: Instant::now(),
+            items,
+            total_size,
+        })
+    })
+    .await
+    .map_err(|error| format!("扫描下载目录任务失败: {error}"))??;
+    *cache_store.lock().await = Some(cache.clone());
+    Ok(cache)
 }
 
 /// 清空下载历史

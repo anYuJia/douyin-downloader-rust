@@ -238,6 +238,16 @@ export function FullscreenPlayer({
     }
   }, [currentIndex, goToVideo]);
 
+  const releaseMediaSwitchSoon = useCallback(() => {
+    if (mediaSwitchReleaseRef.current) {
+      window.clearTimeout(mediaSwitchReleaseRef.current);
+    }
+    mediaSwitchReleaseRef.current = window.setTimeout(() => {
+      mediaSwitchingRef.current = false;
+      mediaSwitchReleaseRef.current = null;
+    }, 650);
+  }, []);
+
   const switchToMedia = useCallback((index: number) => {
     if (mediaItems.length === 0) return;
     const safeIndex = ((index % mediaItems.length) + mediaItems.length) % mediaItems.length;
@@ -254,10 +264,8 @@ export function FullscreenPlayer({
     setDuration(0);
     progressSampleRef.current = 0;
     setPlaying(shouldKeepPlaying);
-    mediaSwitchReleaseRef.current = window.setTimeout(() => {
-      mediaSwitchingRef.current = false;
-    }, 800);
-  }, [mediaItems.length, playing]);
+    releaseMediaSwitchSoon();
+  }, [mediaItems.length, playing, releaseMediaSwitchSoon]);
 
   const playNextMedia = useCallback(() => {
     if (mediaItems.length > 1) {
@@ -288,6 +296,12 @@ export function FullscreenPlayer({
     setPlaying(true);
     setReloadKey((value) => value + 1);
   }, [mediaIndex, mediaItems.length, switchToMedia]);
+
+  const requestAdvanceMediaSequence = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      advanceMediaSequence();
+    });
+  }, [advanceMediaSequence]);
 
   const togglePlay = useCallback(() => {
     if (!currentMedia) return;
@@ -692,7 +706,7 @@ export function FullscreenPlayer({
 
   useEffect(() => {
     if (!open || !currentMedia || !isVideoLikeMedia(currentMedia)) return;
-    const timeout = window.setTimeout(() => {
+    const frame = window.requestAnimationFrame(() => {
       const node = videoRef.current;
       if (!node) return;
       node.currentTime = 0;
@@ -701,8 +715,8 @@ export function FullscreenPlayer({
         setPlaying(true);
         startVideoProgressLoop();
       }).catch(() => setPlaying(false));
-    }, 40);
-    return () => window.clearTimeout(timeout);
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [currentMedia, mediaKey, open, startVideoProgressLoop]);
 
   useEffect(() => {
@@ -776,7 +790,7 @@ export function FullscreenPlayer({
         const next = Math.min(IMAGE_DURATION_SECONDS, value + delta);
         if (next >= IMAGE_DURATION_SECONDS && !imageAdvanceQueued.current) {
           imageAdvanceQueued.current = true;
-          window.setTimeout(advanceMediaSequence, 0);
+          requestAdvanceMediaSequence();
         }
         return next;
       });
@@ -788,7 +802,7 @@ export function FullscreenPlayer({
 
     frame = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frame);
-  }, [advanceMediaSequence, currentMedia?.type, mediaKey, open, playing]);
+  }, [currentMedia?.type, mediaKey, open, playing, requestAdvanceMediaSequence]);
 
   useEffect(() => {
     if (!open) return;
@@ -925,6 +939,7 @@ export function FullscreenPlayer({
                     }}
                     onCanPlay={(event) => {
                       markMediaReady();
+                      releaseMediaSwitchSoon();
                       if (shouldUseBgmForCurrentMedia && desiredPlayingRef.current) {
                         playBgm();
                       } else {
@@ -969,6 +984,7 @@ export function FullscreenPlayer({
                     className="max-h-full max-w-full object-contain"
                     onLoad={() => {
                       markMediaReady();
+                      releaseMediaSwitchSoon();
                       if (desiredPlayingRef.current) {
                         setPlaying(true);
                         if (shouldUseBgmForCurrentMedia) {
