@@ -717,6 +717,7 @@
 
         if (path === '/api/get_collected_videos') {
             const result = await invoke('get_collected_videos', {
+                secUid: body.sec_uid || params.sec_uid || '',
                 cursor: 0,
                 count: Number(body.count || params.count || 20)
             });
@@ -741,6 +742,7 @@
 
         if (path === '/api/download_collected') {
             return invoke('download_collected_videos', {
+                secUid: body.sec_uid || params.sec_uid || '',
                 count: Number(body.count || params.count || 20)
             });
         }

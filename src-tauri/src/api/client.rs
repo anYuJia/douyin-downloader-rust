@@ -921,15 +921,23 @@ impl DouyinClient {
 
     async fn request_collected_videos_response(
         &self,
+        sec_uid: &str,
         max_cursor: i64,
         count: u32,
     ) -> Result<serde_json::Value> {
         let mut params = HashMap::new();
         params.insert("max_cursor", max_cursor.to_string());
         params.insert("count", count.to_string());
+        if !sec_uid.is_empty() {
+            params.insert("sec_user_id", sec_uid.to_string());
+        }
 
         let mut headers = HashMap::new();
-        headers.insert("Referer".to_string(), "https://www.douyin.com/".to_string());
+        headers.insert(
+            "Referer".to_string(),
+            "https://www.douyin.com/user/self?from_tab_name=main&showTab=favorite_collection"
+                .to_string(),
+        );
 
         let response = self
             .request_raw_json_with_options(
@@ -973,11 +981,12 @@ impl DouyinClient {
 
     pub async fn get_collected_videos_python_style(
         &self,
+        sec_uid: &str,
         max_cursor: i64,
         count: u32,
     ) -> Result<Vec<LikedVideoItem>> {
         let response = self
-            .request_collected_videos_response(max_cursor, count)
+            .request_collected_videos_response(sec_uid, max_cursor, count)
             .await?;
 
         Ok(response["aweme_list"]
@@ -994,11 +1003,12 @@ impl DouyinClient {
     /// 获取收藏视频列表（返回 VideoInfo，用于批量下载）
     pub async fn get_collected_videos(
         &self,
+        sec_uid: &str,
         max_cursor: i64,
         count: u32,
     ) -> Result<(Vec<VideoInfo>, i64, bool)> {
         let response = self
-            .request_collected_videos_response(max_cursor, count)
+            .request_collected_videos_response(sec_uid, max_cursor, count)
             .await?;
 
         let aweme_list = response["aweme_list"].as_array();

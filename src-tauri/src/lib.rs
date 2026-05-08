@@ -807,6 +807,7 @@ async fn get_liked_videos(
 #[tauri::command]
 async fn get_collected_videos(
     state: State<'_, AppState>,
+    sec_uid: String,
     cursor: i64,
     count: u32,
 ) -> Result<serde_json::Value, String> {
@@ -820,8 +821,18 @@ async fn get_collected_videos(
         }
     };
 
+    // 如果前端未提供 sec_uid，从当前用户信息中获取
+    let sec_uid = if sec_uid.trim().is_empty() {
+        match client.get_current_user().await {
+            Ok(user) if !user.sec_uid.is_empty() => user.sec_uid,
+            _ => String::new(),
+        }
+    } else {
+        sec_uid.trim().to_string()
+    };
+
     match client
-        .get_collected_videos_python_style(cursor, count)
+        .get_collected_videos_python_style(&sec_uid, cursor, count)
         .await
     {
         Ok(videos) if !videos.is_empty() => {
@@ -1298,6 +1309,7 @@ async fn download_liked_videos(
 #[tauri::command]
 async fn download_collected_videos(
     state: State<'_, AppState>,
+    sec_uid: String,
     count: u32,
 ) -> Result<serde_json::Value, String> {
     let client = match get_client(&state).await {
@@ -1310,7 +1322,17 @@ async fn download_collected_videos(
         }
     };
 
-    let (videos, _, _) = match client.get_collected_videos(0, count).await {
+    // 如果前端未提供 sec_uid，从当前用户信息中获取
+    let sec_uid = if sec_uid.trim().is_empty() {
+        match client.get_current_user().await {
+            Ok(user) if !user.sec_uid.is_empty() => user.sec_uid,
+            _ => String::new(),
+        }
+    } else {
+        sec_uid.trim().to_string()
+    };
+
+    let (videos, _, _) = match client.get_collected_videos(&sec_uid, 0, count).await {
         Ok(result) => result,
         Err(e) => {
             return Ok(serde_json::json!({

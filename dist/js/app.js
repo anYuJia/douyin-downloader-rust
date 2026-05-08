@@ -1728,7 +1728,8 @@ async function downloadCollectedVideos() {
     try {
         setButtonLoading('download-collected-btn', true, '获取中');
         var count = document.getElementById('collected-videos-count').value || 20;
-        var response = await fetch('/api/get_collected_videos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ count: parseInt(count) }) });
+        var secUid = (currentUser && currentUser.sec_uid) ? currentUser.sec_uid : '';
+        var response = await fetch('/api/get_collected_videos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ count: parseInt(count), sec_uid: secUid }) });
         var result = await response.json();
         if (result.success) {
             isHomeView = false; hideAllSections();
