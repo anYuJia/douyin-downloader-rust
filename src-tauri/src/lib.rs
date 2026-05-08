@@ -1015,6 +1015,29 @@ async fn get_current_user(state: State<'_, AppState>) -> Result<UserInfo, String
     client.get_current_user().await.map_err(|e| e.to_string())
 }
 
+/// 读取剪切板内容
+#[tauri::command]
+async fn read_clipboard(
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let app_handle = state
+        .app_handle
+        .lock()
+        .await
+        .clone()
+        .ok_or_else(|| "AppHandle 未初始化".to_string())?;
+
+    let clipboard = app_handle.clipboard();
+    match clipboard.read_text() {
+        Ok(Some(text)) => Ok(text),
+        Ok(None) => Ok(String::new()),
+        Err(e) => {
+            log::warn!("读取剪切板失败: {}", e);
+            Ok(String::new())
+        }
+    }
+}
+
 // ==================== 下载 API ====================
 
 /// 下载单个视频
@@ -2087,6 +2110,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let log_level = if cfg!(debug_assertions) {
@@ -2144,6 +2168,7 @@ pub fn run() {
             get_comments,
             verify_cookie,
             get_current_user,
+            read_clipboard,
             open_verify_browser,
             cookie_browser_login,
             cancel_cookie_browser_login,

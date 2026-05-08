@@ -893,6 +893,10 @@
             return { success: false, message: '请直接使用媒体原始地址下载音乐。' };
         }
 
+        if (path === '/api/read_clipboard') {
+            return invoke('read_clipboard');
+        }
+
         console.warn('[Tauri Adapter] Unmatched API:', method, path);
         return {
             success: false,

@@ -55,6 +55,7 @@
     "shell": {
       "open": true
     },
+    "clipboard-manager": {},
     "updater": {
       "endpoints": [
         "https://github.com/anYuJia/douyin-downloader-rust/releases/latest/download/latest.json"

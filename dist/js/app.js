@@ -55,6 +55,9 @@ document.addEventListener('DOMContentLoaded', function () {
             loadRecommendedFeed(20);  // 只加载数据，不显示界面
         }
     }, 1000); // 延迟1秒，等待页面完全加载
+
+    // 启动剪切板监听（每 1.5 秒检查一次）
+    setInterval(checkDouyinClipboard, 1500);
 });
 
 function initializeApp() {
@@ -163,6 +166,37 @@ function setupEventListeners() {
             showToast('检测到抖音链接，已自动填入');
         }
     });
+
+    // 剪切板监听（自动检测抖音分享链接）
+    var lastClipboardUrl = null;
+    var douyinUrlPattern = /https?:\/\/(?:www\.)?(?:v\.douyin\.com\/[a-zA-Z0-9]+\/?|douyin\.com\/(?:video|note)\/[0-9]+)/i;
+
+    function extractDouyinUrl(text) {
+        if (!text) return null;
+        var match = text.match(douyinUrlPattern);
+        return match ? match[0] : null;
+    }
+
+    function isDouyinUrl(text) {
+        return douyinUrlPattern.test(text || '');
+    }
+
+    async function checkDouyinClipboard() {
+        try {
+            var text = await fetch('/api/read_clipboard').then(function (r) { return r.text(); });
+            if (!text || !isDouyinUrl(text)) return;
+            var url = extractDouyinUrl(text);
+            if (!url || url === lastClipboardUrl) return;
+            lastClipboardUrl = url;
+            var confirmed = confirm('检测到抖音链接，是否下载？\n\n' + url);
+            if (confirmed) {
+                document.getElementById('link-input').value = url;
+                downloadFromLink();
+            }
+        } catch (e) {
+            // 剪切板读取失败时静默忽略
+        }
+    }
 
     // Global keyboard shortcuts
     document.addEventListener('keydown', function (e) {
