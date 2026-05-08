@@ -328,11 +328,19 @@
                 <div class="section-panel">
                     <div class="section-panel-header section-panel-header--warning">
                         <div class="section-panel-title">
-                            <i class="bi bi-star-fill"></i> 收藏视频列表
+                            <i class="bi bi-star-fill"></i> 收藏列表
+                            <div class="collected-category-tabs">
+                                <button class="btn btn-sm collected-category-tab active" id="collectedTabVideo" onclick="switchCollectedCategory('video')">
+                                    <i class="bi bi-play-btn"></i> 视频
+                                </button>
+                                <button class="btn btn-sm collected-category-tab" id="collectedTabMix" onclick="switchCollectedCategory('mix')">
+                                    <i class="bi bi-collection"></i> 合集
+                                </button>
+                            </div>
                         </div>
                         <div class="section-panel-actions">
                             <span id="collectedVideoCount" class="badge section-count-badge">0 个视频</span>
-                            <button onclick="downloadAllCollectedVideos()" class="btn btn-outline-light btn-sm">
+                            <button onclick="downloadAllCollectedVideos()" class="btn btn-outline-light btn-sm" id="downloadAllCollectedBtn">
                                 <i class="bi bi-download"></i> 下载全部
                             </button>
                             <button onclick="goBackToHome()" class="btn btn-outline-light btn-sm">
@@ -342,6 +350,14 @@
                     </div>
                     <div class="section-panel-body">
                         <div id="collectedVideosList" class="row"></div>
+                        <div class="collected-load-more-wrapper">
+                            <button class="btn btn-outline-warning btn-sm" id="collectedLoadMoreBtn" style="display: none;" onclick="loadMoreCollected()">
+                                <i class="bi bi-arrow-down-circle"></i> 加载更多
+                            </button>
+                            <button class="btn btn-outline-info btn-sm mt-2" id="mixLoadMoreBtn" style="display: none;" onclick="loadMoreMixVideos()">
+                                <i class="bi bi-arrow-down-circle"></i> 加载更多
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

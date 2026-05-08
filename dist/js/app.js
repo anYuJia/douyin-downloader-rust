@@ -720,7 +720,7 @@ async function selectUser(secUid, nickname) {
 // USER DETAIL
 // ═══════════════════════════════════════════════
 function goBackToHome() {
-    ['userDetailSection', 'userVideosSection', 'likedVideosSection', 'likedAuthorsSection', 'linkParseResult', 'recommendedFeedSection', 'myDownloadsSection'].forEach(function(id) {
+    ['userDetailSection', 'userVideosSection', 'likedVideosSection', 'likedAuthorsSection', 'collectedVideosSection', 'linkParseResult', 'recommendedFeedSection', 'myDownloadsSection'].forEach(function(id) {
         hideSectionById(id);
     });
     revealSectionById('emptyState', 'flex');
@@ -728,6 +728,8 @@ function goBackToHome() {
     currentUser = null;
     allVideos = [];
     isHomeView = true;
+    // 重置收藏分类 tab 到视频
+    if (typeof collectedCategory !== 'undefined') collectedCategory = 'video';
 }
 
 function showUserDetail(user) {
@@ -1724,28 +1726,98 @@ async function downloadLikedAuthors() {
     finally { setButtonLoading('download-liked-authors-btn', false); }
 }
 
-async function downloadCollectedVideos() {
+// 收藏列表当前分类: 'video' | 'mix'
+var collectedCategory = 'video';
+// 分页状态
+var collectedPagination = {
+    videoCursor: 0,
+    videoHasMore: false,
+    mixCursor: 0,
+    mixHasMore: false,
+};
+
+async function downloadCollectedVideos(category, append) {
+    category = category || collectedCategory;
+    append = append || false;
+    collectedCategory = category;
+
     try {
-        setButtonLoading('download-collected-btn', true, '获取中');
+        var btnId = 'download-collected-btn';
         var count = document.getElementById('collected-videos-count').value || 20;
-        var response = await fetch('/api/get_collected_videos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ count: parseInt(count) }) });
-        var result = await response.json();
-        if (result.success) {
-            isHomeView = false; hideAllSections();
-            displayCollectedVideos(result.data);
-            CollectedDataCache.saveCollectedVideos(result.data, result.data.length);
-            CollectedDataCache.currentDisplayType = 'collected';
-            showToast('获取到 ' + result.data.length + ' 个收藏视频', 'success');
-        } else {
-            showToast(result.message || '获取收藏视频失败', 'error');
-            addLog('收藏视频失败: ' + (result.message || '未知错误'), 'warning');
-            console.error('[CollectedVideos] API error:', result);
+
+        if (category === 'video') {
+            setButtonLoading(btnId, true, '获取中');
+            var cursor = append ? collectedPagination.videoCursor : 0;
+            console.log('[CollectedVideos] request:', { cursor, count: parseInt(count), append });
+            var response = await fetch('/api/get_collected_videos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cursor: cursor, count: parseInt(count) }) });
+            var result = await response.json();
+            console.log('[CollectedVideos] response:', { success: result.success, dataLen: result.data && result.data.length, next_cursor: result.next_cursor, has_more: result.has_more });
+            if (result.success) {
+                if (!append) { isHomeView = false; hideAllSections(); }
+                if (append) {
+                    appendCollectedVideos(result.data);
+                    CollectedDataCache.appendCollectedVideos(result.data);
+                } else {
+                    displayCollectedVideos(result.data);
+                    CollectedDataCache.saveCollectedVideos(result.data, result.data.length);
+                }
+                collectedPagination.videoCursor = result.next_cursor || 0;
+                collectedPagination.videoHasMore = result.has_more || false;
+                CollectedDataCache.currentDisplayType = 'collected';
+                updateCollectedLoadMoreButton();
+                if (result.data.length === 0) {
+                    showToast(result.message || '收藏列表为空', 'warning');
+                } else {
+                    showToast('获取到 ' + result.data.length + ' 个收藏视频' + (result.has_more ? '（可继续加载）' : ''), 'success');
+                }
+            } else {
+                showToast(result.message || '获取收藏视频失败', 'error');
+                addLog('收藏视频失败: ' + (result.message || '未知错误'), 'warning');
+                console.error('[CollectedVideos] API error:', result);
+            }
+        } else if (category === 'mix') {
+            setButtonLoading(btnId, true, '获取中');
+            var cursor = append ? collectedPagination.mixCursor : 0;
+            var response = await fetch('/api/get_collected_mixes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cursor: cursor, count: parseInt(count) }) });
+            var result = await response.json();
+            if (result.success) {
+                if (!append) { isHomeView = false; hideAllSections(); }
+                if (append) {
+                    appendCollectedMixes(result.data);
+                } else {
+                    displayCollectedMixes(result.data);
+                }
+                collectedPagination.mixCursor = result.next_cursor || 0;
+                collectedPagination.mixHasMore = result.has_more || false;
+                CollectedDataCache.currentDisplayType = 'collected_mix';
+                updateCollectedLoadMoreButton();
+                if (result.data.length === 0) {
+                    showToast(result.message || '收藏合集列表为空', 'warning');
+                } else {
+                    showToast('获取到 ' + result.data.length + ' 个收藏合集' + (result.has_more ? '（可继续加载）' : ''), 'success');
+                }
+            } else {
+                showToast(result.message || '获取收藏合集失败', 'error');
+                addLog('收藏合集失败: ' + (result.message || '未知错误'), 'warning');
+                console.error('[CollectedMixes] API error:', result);
+            }
         }
     } catch (error) {
-        showToast('获取收藏视频失败: ' + error, 'error');
-        console.error('[CollectedVideos] Exception:', error);
+        showToast('获取收藏数据失败: ' + error, 'error');
+        console.error('[Collected] Exception:', error);
     }
     finally { setButtonLoading('download-collected-btn', false); }
+}
+
+function updateCollectedLoadMoreButton() {
+    var loadMoreBtn = document.getElementById('collectedLoadMoreBtn');
+    if (!loadMoreBtn) return;
+    var hasMore = collectedCategory === 'video' ? collectedPagination.videoHasMore : collectedPagination.mixHasMore;
+    loadMoreBtn.style.display = hasMore ? 'inline-block' : 'none';
+}
+
+function loadMoreCollected() {
+    downloadCollectedVideos(collectedCategory, true);
 }
 
 function displayLikedVideos(videos) {
@@ -1810,6 +1882,224 @@ function displayCollectedVideos(videos) {
     });
     revealSectionById('collectedVideosSection');
     _hideEmptyState();
+}
+
+function appendCollectedVideos(videos) {
+    var videosList = document.getElementById('collectedVideosList');
+    if (!videosList) return;
+    var existing = window.currentCollectedVideos || [];
+    videos.forEach(function(v) { VideoStorage.saveVideo(v); existing.push(v); });
+    window.currentCollectedVideos = existing;
+    videos.forEach(function(video) {
+        var vc = createVideoCardElement(video, {
+            showAuthorButton: true
+        });
+        videosList.appendChild(vc);
+    });
+    document.getElementById('collectedVideoCount').textContent = existing.length + ' 个视频';
+}
+
+function displayCollectedMixes(mixes) {
+    var section = document.getElementById('collectedVideosSection');
+    var videosList = document.getElementById('collectedVideosList');
+    videosList.innerHTML = '';
+    document.getElementById('collectedVideoCount').textContent = mixes.length + ' 个合集';
+    window.currentCollectedMixes = mixes;
+    mixes.forEach(function(mix) {
+        var mc = document.createElement('div');
+        mc.className = 'col-lg-3 col-md-4 col-sm-6 mb-3';
+        var coverImg = mix.cover_url || '/default-cover.svg';
+        var statsHtml = '';
+        if (mix.statis) {
+            statsHtml = '<div class="row text-center mix-stats mt-2">' +
+                '<div class="col-4"><small class="text-muted">播放</small><span class="small">' + formatNumber(mix.statis.play_vv || 0) + '</span></div>' +
+                '<div class="col-4"><small class="text-muted">收藏</small><span class="small">' + formatNumber(mix.statis.collect_vv || 0) + '</span></div>' +
+                '<div class="col-4"><small class="text-muted">更新</small><span class="small">' + formatNumber(mix.statis.updated_to_episode || 0) + '集</span></div>' +
+                '</div>';
+        }
+        var authorHtml = '';
+        if (mix.author && mix.author.nickname) {
+            authorHtml = '<div class="d-flex align-items-center mt-2">' +
+                '<img src="' + (mix.author.avatar_thumb || '/default-avatar.svg') + '" class="rounded-circle me-2" style="width:28px;height:28px;object-fit:cover;" onerror="this.src=\'/default-avatar.svg\'">' +
+                '<small class="text-muted text-truncate">' + escapeHtml(mix.author.nickname) + '</small></div>';
+        }
+        var updateTimeStr = mix.update_time ? new Date(mix.update_time * 1000).toLocaleDateString('zh-CN') : '';
+        mc.innerHTML = '<div class="card h-100 mix-card" style="cursor:pointer;" onclick="loadMixVideos(\'' + mix.mix_id + '\', \'' + escapeHtml(mix.mix_name).replace(/'/g, "\\'") + '\')">' +
+            '<div class="mix-cover-wrapper">' +
+            '<img src="' + coverImg + '" class="card-img-top mix-cover" onerror="this.src=\'/default-cover.svg\'">' +
+            '<span class="badge bg-dark mix-badge"><i class="bi bi-collection"></i> 合集</span>' +
+            '</div>' +
+            '<div class="card-body mix-card-body">' +
+            '<h6 class="card-title text-truncate" title="' + escapeHtml(mix.mix_name) + '">' + escapeHtml(mix.mix_name) + '</h6>' +
+            '<p class="card-text mix-desc">' + escapeHtml(mix.desc || '') + '</p>' +
+            statsHtml +
+            authorHtml +
+            (updateTimeStr ? '<small class="text-muted">更新: ' + updateTimeStr + '</small>' : '') +
+            '</div></div>';
+        videosList.appendChild(mc);
+    });
+    revealSectionById('collectedVideosSection');
+    _hideEmptyState();
+}
+
+function appendCollectedMixes(mixes) {
+    var videosList = document.getElementById('collectedVideosList');
+    if (!videosList) return;
+    var existing = window.currentCollectedMixes || [];
+    mixes.forEach(function(m) { existing.push(m); });
+    window.currentCollectedMixes = existing;
+    mixes.forEach(function(mix) {
+        var mc = document.createElement('div');
+        mc.className = 'col-lg-3 col-md-4 col-sm-6 mb-3';
+        var coverImg = mix.cover_url || '/default-cover.svg';
+        var statsHtml = '';
+        if (mix.statis) {
+            statsHtml = '<div class="row text-center mix-stats mt-2">' +
+                '<div class="col-4"><small class="text-muted">播放</small><span class="small">' + formatNumber(mix.statis.play_vv || 0) + '</span></div>' +
+                '<div class="col-4"><small class="text-muted">收藏</small><span class="small">' + formatNumber(mix.statis.collect_vv || 0) + '</span></div>' +
+                '<div class="col-4"><small class="text-muted">更新</small><span class="small">' + formatNumber(mix.statis.updated_to_episode || 0) + '集</span></div>' +
+                '</div>';
+        }
+        var authorHtml = '';
+        if (mix.author && mix.author.nickname) {
+            authorHtml = '<div class="d-flex align-items-center mt-2">' +
+                '<img src="' + (mix.author.avatar_thumb || '/default-avatar.svg') + '" class="rounded-circle me-2" style="width:28px;height:28px;object-fit:cover;" onerror="this.src=\'/default-avatar.svg\'">' +
+                '<small class="text-muted text-truncate">' + escapeHtml(mix.author.nickname) + '</small></div>';
+        }
+        var updateTimeStr = mix.update_time ? new Date(mix.update_time * 1000).toLocaleDateString('zh-CN') : '';
+        mc.innerHTML = '<div class="card h-100 mix-card" style="cursor:pointer;" onclick="loadMixVideos(\'' + mix.mix_id + '\', \'' + escapeHtml(mix.mix_name).replace(/'/g, "\\'") + '\')">' +
+            '<div class="mix-cover-wrapper">' +
+            '<img src="' + coverImg + '" class="card-img-top mix-cover" onerror="this.src=\'/default-cover.svg\'">' +
+            '<span class="badge bg-dark mix-badge"><i class="bi bi-collection"></i> 合集</span>' +
+            '</div>' +
+            '<div class="card-body mix-card-body">' +
+            '<h6 class="card-title text-truncate" title="' + escapeHtml(mix.mix_name) + '">' + escapeHtml(mix.mix_name) + '</h6>' +
+            '<p class="card-text mix-desc">' + escapeHtml(mix.desc || '') + '</p>' +
+            statsHtml +
+            authorHtml +
+            (updateTimeStr ? '<small class="text-muted">更新: ' + updateTimeStr + '</small>' : '') +
+            '</div></div>';
+        videosList.appendChild(mc);
+    });
+    document.getElementById('collectedVideoCount').textContent = existing.length + ' 个合集';
+}
+
+var currentMixInfo = { seriesId: '', name: '', cursor: 0, hasMore: false };
+
+async function loadMixVideos(seriesId, mixName) {
+    try {
+        hideAllSections();
+        var response = await fetch('/api/get_mix_videos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ series_id: seriesId, cursor: 0, count: 12 }) });
+        var result = await response.json();
+        if (result.success) {
+            currentMixInfo = { seriesId: seriesId, name: mixName, cursor: result.next_cursor || 0, hasMore: result.has_more || false };
+            displayMixVideos(result.data, mixName);
+            showToast('合集「' + mixName + '」获取到 ' + result.data.length + ' 个视频', 'success');
+        } else {
+            showToast(result.message || '获取合集视频失败', 'error');
+        }
+    } catch (error) {
+        showToast('获取合集视频失败: ' + error, 'error');
+    }
+}
+
+// 保存合集列表页原始的 header 内容，用于返回时恢复
+var mixListHeaderOriginalHtml = null;
+
+function displayMixVideos(videos, mixName, append) {
+    var section = document.getElementById('collectedVideosSection');
+    var videosList = document.getElementById('collectedVideosList');
+    if (!append) {
+        videosList.innerHTML = '';
+        window.currentMixVideos = [];
+    }
+    window.currentMixVideos = (window.currentMixVideos || []).concat(videos);
+    document.getElementById('collectedVideoCount').textContent = window.currentMixVideos.length + ' / ? 个视频';
+    videos.forEach(function(v) { VideoStorage.saveVideo(v); });
+    videos.forEach(function(video) {
+        var vc = createVideoCardElement(video, { showAuthorButton: true });
+        videosList.appendChild(vc);
+    });
+    // 保存原始 header（首次进入时）
+    var headerTitle = document.querySelector('#collectedVideosSection .section-panel-title');
+    if (headerTitle && !mixListHeaderOriginalHtml) {
+        mixListHeaderOriginalHtml = headerTitle.innerHTML;
+    }
+    // Update header to show mix name and back button
+    if (headerTitle && !append) {
+        headerTitle.innerHTML = '<i class="bi bi-collection"></i> 合集: ' + escapeHtml(mixName) +
+            ' <button class="btn btn-sm btn-outline-light ms-2" onclick="goBackToMixList()" style="font-size:0.75rem;"><i class="bi bi-arrow-left"></i> 返回</button>';
+    }
+    // Hide category tabs when inside a mix
+    var catTabs = document.querySelector('#collectedVideosSection .collected-category-tabs');
+    if (catTabs) catTabs.style.display = 'none';
+    // 更新加载更多按钮可见性
+    updateMixLoadMoreButton();
+    revealSectionById('collectedVideosSection');
+    _hideEmptyState();
+}
+
+function updateMixLoadMoreButton() {
+    var btn = document.getElementById('mixLoadMoreBtn');
+    if (btn) {
+        btn.style.display = currentMixInfo.hasMore ? '' : 'none';
+    }
+}
+
+// 从合集视频列表返回到合集列表
+function goBackToMixList() {
+    // 恢复原始 header
+    var headerTitle = document.querySelector('#collectedVideosSection .section-panel-title');
+    if (headerTitle && mixListHeaderOriginalHtml) {
+        headerTitle.innerHTML = mixListHeaderOriginalHtml;
+    }
+    // 显示分类 tabs
+    var catTabs = document.querySelector('#collectedVideosSection .collected-category-tabs');
+    if (catTabs) catTabs.style.display = '';
+    // 隐藏合集加载更多按钮
+    var mixBtn = document.getElementById('mixLoadMoreBtn');
+    if (mixBtn) mixBtn.style.display = 'none';
+    // 重置合集状态
+    currentMixInfo = { seriesId: '', name: '', cursor: 0, hasMore: false };
+    // 切回 mix 分类并刷新列表
+    collectedCategory = 'mix';
+    updateCollectedTabsUI();
+    downloadCollectedVideos('mix', false);
+}
+
+async function loadMoreMixVideos() {
+    if (!currentMixInfo.seriesId || !currentMixInfo.hasMore) return;
+    var btn = document.getElementById('mixLoadMoreBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-arrow-repeat spin"></i> 加载中...';
+    }
+    try {
+        var response = await fetch('/api/get_mix_videos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ series_id: currentMixInfo.seriesId, cursor: currentMixInfo.cursor, count: 12 })
+        });
+        var result = await response.json();
+        if (result.success && result.data && result.data.length > 0) {
+            currentMixInfo.cursor = result.next_cursor || 0;
+            currentMixInfo.hasMore = result.has_more || false;
+            displayMixVideos(result.data, currentMixInfo.name, true);
+        } else if (result.success && result.data && result.data.length === 0) {
+            currentMixInfo.hasMore = false;
+            updateMixLoadMoreButton();
+            showToast('没有更多视频了', 'info');
+        } else {
+            showToast(result.message || '加载更多失败', 'error');
+        }
+    } catch (error) {
+        showToast('加载更多失败: ' + error, 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-arrow-down-circle"></i> 加载更多';
+        }
+    }
 }
 
 async function downloadAllLikedAuthors() {
@@ -1919,13 +2209,43 @@ async function handleLikedAuthorsClick() {
 
 async function handleCollectedVideosClick() {
     var s = document.getElementById('collectedVideosSection');
-    if ((s && s.style.display === 'block') || CollectedDataCache.currentDisplayType === 'collected') { await downloadCollectedVideos(); return; }
+    if ((s && s.style.display === 'block') || CollectedDataCache.currentDisplayType === 'collected') { await downloadCollectedVideos('video', false); return; }
     var cached = CollectedDataCache.getCollectedVideos();
     if (cached && cached.data && cached.data.length > 0) { hideAllSections(true); displayCollectedVideos(cached.data); CollectedDataCache.currentDisplayType = 'collected'; showToast('显示缓存的 ' + cached.data.length + ' 个收藏视频', 'info'); }
-    else await downloadCollectedVideos();
+    else await downloadCollectedVideos('video', false);
+}
+
+// 更新收藏分类 tab 的 UI 状态
+function updateCollectedTabsUI() {
+    var tabVideo = document.getElementById('collectedTabVideo');
+    var tabMix = document.getElementById('collectedTabMix');
+    var downloadAllBtn = document.getElementById('downloadAllCollectedBtn');
+    if (tabVideo && tabMix) {
+        if (collectedCategory === 'video') {
+            tabVideo.classList.add('active');
+            tabMix.classList.remove('active');
+            if (downloadAllBtn) downloadAllBtn.style.display = '';
+        } else {
+            tabVideo.classList.remove('active');
+            tabMix.classList.add('active');
+            if (downloadAllBtn) downloadAllBtn.style.display = 'none';
+        }
+    }
+}
+
+function switchCollectedCategory(category) {
+    if (collectedCategory === category) return;
+    collectedCategory = category;
+    updateCollectedTabsUI();
+    // 重新获取对应分类数据
+    downloadCollectedVideos(category, false);
 }
 
 async function downloadAllCollectedVideos() {
+    if (collectedCategory === 'mix') {
+        showToast('合集暂不支持批量下载', 'warning');
+        return;
+    }
     if (!window.currentCollectedVideos || window.currentCollectedVideos.length === 0) { showToast('没有可下载的收藏视频', 'warning'); return; }
     var videos = window.currentCollectedVideos, total = videos.length;
     var batchId = 'batch_collected_videos_' + Date.now();
