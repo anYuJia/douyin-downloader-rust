@@ -234,6 +234,39 @@ pub struct LikedVideoItem {
     pub author: LikedVideoAuthor,
 }
 
+/// 收藏合集作者信息
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct CollectionMixAuthor {
+    pub nickname: String,
+    pub sec_uid: String,
+    pub avatar_thumb: String,
+}
+
+/// 收藏合集统计信息
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct CollectionMixStatis {
+    pub collect_vv: i64,
+    pub play_vv: i64,
+    pub updated_to_episode: i64,
+}
+
+/// 收藏合集单项结构
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct CollectionMixItem {
+    pub mix_id: String,
+    pub mix_name: String,
+    pub desc: String,
+    pub cover_url: String,
+    pub author: CollectionMixAuthor,
+    pub statis: CollectionMixStatis,
+    pub create_time: i64,
+    pub update_time: i64,
+    pub mix_type: i32,
+}
+
 /// 下载任务
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DownloadTask {

@@ -26,8 +26,28 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager, State};
+use tauri_plugin_clipboard_manager::ClipboardExt;
 use tokio::sync::{mpsc, Mutex};
 use url::Url;
+
+use std::sync::OnceLock;
+
+/// 日志文件路径（在 run() 中初始化）
+static LOG_FILE_PATH: OnceLock<PathBuf> = OnceLock::new();
+
+/// 初始化日志文件路径（在 run() 的 setup 中调用）
+fn init_log_path(path: PathBuf) {
+    let _ = LOG_FILE_PATH.set(path);
+}
+
+/// 直接写入一行到日志文件（不依赖 log crate，确保一定能写入）
+pub fn write_log_file(line: &str) {
+    if let Some(path) = LOG_FILE_PATH.get() {
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+            let _ = std::io::Write::write_all(&mut f, line.as_bytes());
+        }
+    }
+}
 
 /// 应用状态
 #[derive(Clone)]
@@ -815,6 +835,160 @@ async fn get_liked_videos(
     }
 }
 
+/// 获取收藏视频列表
+#[tauri::command]
+async fn get_collected_videos(
+    state: State<'_, AppState>,
+    cursor: i64,
+    count: u32,
+) -> Result<serde_json::Value, String> {
+    let client = match get_client(&state).await {
+        Ok(client) => client,
+        Err(_) => {
+            return Ok(serde_json::json!({
+                "success": false,
+                "message": "请先设置Cookie"
+            }));
+        }
+    };
+
+    let req_log = format!("[CollectedVideos] 请求收藏列表: cursor={}, count={}", cursor, count);
+    log::info!("{}", req_log);
+    write_log_file(&format!("{}\n", req_log));
+
+    match client
+        .get_collected_videos_python_style(cursor, count)
+        .await
+    {
+        Ok((videos, next_cursor, has_more)) => {
+            let video_count = videos.len();
+            let resp_log = format!("[CollectedVideos] 返回 {} 个收藏视频, has_more={}, next_cursor={}", video_count, has_more, next_cursor);
+            log::info!("{}", resp_log);
+            write_log_file(&format!("{}\n", resp_log));
+            Ok(serde_json::json!({
+                "success": true,
+                "data": videos,
+                "count": video_count,
+                "has_more": has_more,
+                "next_cursor": next_cursor
+            }))
+        }
+        Err(e) => Ok(serde_json::json!({
+            "success": false,
+            "message": format!("获取收藏视频失败: {}", e),
+            "has_more": false,
+            "next_cursor": 0
+        })),
+    }
+}
+
+/// 获取收藏合集列表
+#[tauri::command]
+async fn get_collected_mixes(
+    state: State<'_, AppState>,
+    cursor: i64,
+    count: u32,
+) -> Result<serde_json::Value, String> {
+    let client = match get_client(&state).await {
+        Ok(client) => client,
+        Err(_) => {
+            return Ok(serde_json::json!({
+                "success": false,
+                "message": "请先设置Cookie"
+            }));
+        }
+    };
+
+    let mix_req = format!("[CollectedMixes] 请求: cursor={}, count={}", cursor, count);
+    log::info!("{}", mix_req);
+    write_log_file(&format!("{}\n", mix_req));
+
+    match client
+        .get_collected_mixes(cursor, count)
+        .await
+    {
+        Ok((mixes, next_cursor, has_more)) if !mixes.is_empty() => {
+            let count = mixes.len();
+            let mix_resp = format!("[CollectedMixes] 成功获取 {} 个合集, has_more={}, next_cursor={}", count, has_more, next_cursor);
+            log::info!("{}", mix_resp);
+            write_log_file(&format!("{}\n", mix_resp));
+            Ok(serde_json::json!({
+                "success": true,
+                "data": mixes,
+                "count": count,
+                "has_more": has_more,
+                "next_cursor": next_cursor
+            }))
+        }
+        Ok(_) => Ok(serde_json::json!({
+            "success": true,
+            "data": [],
+            "count": 0,
+            "message": "收藏合集列表为空，请确认账号有收藏的合集。",
+            "has_more": false,
+            "next_cursor": 0
+        })),
+        Err(e) => Ok(serde_json::json!({
+            "success": false,
+            "message": format!("获取收藏合集失败: {}", e),
+            "has_more": false,
+            "next_cursor": 0
+        })),
+    }
+}
+
+/// 获取合集内的视频列表
+#[tauri::command]
+async fn get_mix_videos(
+    state: State<'_, AppState>,
+    series_id: String,
+    cursor: i64,
+    count: u32,
+) -> Result<serde_json::Value, String> {
+    let client = match get_client(&state).await {
+        Ok(client) => client,
+        Err(_) => {
+            return Ok(serde_json::json!({
+                "success": false,
+                "message": "请先设置Cookie"
+            }));
+        }
+    };
+
+    log::info!("[MixVideos] 请求合集视频: series_id={}, cursor={}, count={}", series_id, cursor, count);
+
+    match client
+        .get_mix_videos(&series_id, cursor, count)
+        .await
+    {
+        Ok((videos, next_cursor, has_more)) if !videos.is_empty() => {
+            let count = videos.len();
+            log::info!("[MixVideos] 成功获取 {} 个合集视频, has_more={}, next_cursor={}", count, has_more, next_cursor);
+            Ok(serde_json::json!({
+                "success": true,
+                "data": videos,
+                "count": count,
+                "has_more": has_more,
+                "next_cursor": next_cursor
+            }))
+        }
+        Ok(_) => Ok(serde_json::json!({
+            "success": true,
+            "data": [],
+            "count": 0,
+            "message": "合集内没有视频。",
+            "has_more": false,
+            "next_cursor": 0
+        })),
+        Err(e) => Ok(serde_json::json!({
+            "success": false,
+            "message": format!("获取合集视频失败: {}", e),
+            "has_more": false,
+            "next_cursor": 0
+        })),
+    }
+}
+
 /// 获取点赞作者列表
 #[tauri::command]
 async fn get_liked_authors(
@@ -986,6 +1160,28 @@ async fn get_current_user(state: State<'_, AppState>) -> Result<UserInfo, String
     let client = get_client(&state).await?;
 
     client.get_current_user().await.map_err(|e| e.to_string())
+}
+
+/// 读取剪切板内容
+#[tauri::command]
+async fn read_clipboard(
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let app_handle = state
+        .app_handle
+        .lock()
+        .await
+        .clone()
+        .ok_or_else(|| "AppHandle 未初始化".to_string())?;
+
+    let clipboard = app_handle.clipboard();
+    match clipboard.read_text() {
+        Ok(text) => Ok(text),
+        Err(e) => {
+            log::warn!("读取剪切板失败: {}", e);
+            Ok(String::new())
+        }
+    }
 }
 
 // ==================== 下载 API ====================
@@ -1282,6 +1478,96 @@ async fn download_liked_videos(
         "success": true,
         "task_id": batch_task_id,
         "message": format!("开始下载 {} 个点赞视频", total_videos),
+        "total_videos": total_videos
+    }))
+}
+
+/// 下载收藏视频
+#[tauri::command]
+async fn download_collected_videos(
+    state: State<'_, AppState>,
+    count: u32,
+) -> Result<serde_json::Value, String> {
+    let client = match get_client(&state).await {
+        Ok(client) => client,
+        Err(_) => {
+            return Ok(serde_json::json!({
+                "success": false,
+                "message": "请先设置Cookie"
+            }));
+        }
+    };
+
+    log::info!("[DownloadCollected] 请求批量下载 {} 个收藏视频", count);
+
+    // 翻页获取所有收藏视频
+    let mut all_videos = Vec::new();
+    let mut cursor: i64 = 0;
+    let mut has_more = true;
+
+    while has_more && (all_videos.len() as u32) < count {
+        let remaining = count - all_videos.len() as u32;
+        let page_size = std::cmp::min(remaining, 20);
+        match client.get_collected_videos(cursor, page_size).await {
+            Ok((mut videos, next_cursor, more)) => {
+                all_videos.append(&mut videos);
+                has_more = more;
+                cursor = next_cursor;
+            }
+            Err(e) => {
+                if all_videos.is_empty() {
+                    return Ok(serde_json::json!({
+                        "success": false,
+                        "message": format!("获取收藏列表失败: {}", e)
+                    }));
+                }
+                break;
+            }
+        }
+    }
+
+    let videos = all_videos;
+
+    if videos.is_empty() {
+        return Ok(serde_json::json!({
+            "success": false,
+            "message": "没有找到收藏视频"
+        }));
+    }
+
+    let batch_task_id = uuid::Uuid::new_v4().to_string();
+    let total_videos = videos.len();
+    let batch_task_id_clone = batch_task_id.clone();
+
+    {
+        let downloader_guard = state.downloader.lock().await;
+        let downloader = match downloader_guard.as_ref() {
+            Some(d) => d,
+            None => {
+                return Ok(serde_json::json!({
+                    "success": false,
+                    "message": "服务未完全初始化"
+                }));
+            }
+        };
+
+        let downloader_clone = downloader.clone();
+        let videos_clone = videos.clone();
+
+        tokio::spawn(async move {
+            if let Err(e) = downloader_clone
+                .start_batch_download(videos_clone, batch_task_id_clone, "收藏视频".to_string())
+                .await
+            {
+                log::error!("Batch download error: {}", e);
+            }
+        });
+    }
+
+    Ok(serde_json::json!({
+        "success": true,
+        "task_id": batch_task_id,
+        "message": format!("开始下载 {} 个收藏视频", total_videos),
         "total_videos": total_videos
     }))
 }
@@ -2204,16 +2490,20 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
-            let log_level = if cfg!(debug_assertions) {
-                log::LevelFilter::Info
-            } else {
-                log::LevelFilter::Warn
-            };
+            // 初始化日志文件路径（所有日志写入 ~/douyin-downloader-logs/app.log）
+            let log_dir = std::env::var("HOME")
+                .map(|h| std::path::PathBuf::from(h).join("douyin-downloader-logs"))
+                .unwrap_or_else(|_| std::path::PathBuf::from("/tmp/douyin-downloader"));
+            let _ = std::fs::create_dir_all(&log_dir);
+            let log_file_path = log_dir.join("app.log");
+            log::info!("[Logger] 日志文件路径: {}", log_file_path.display());
+            init_log_path(log_file_path);
             app.handle().plugin(
                 tauri_plugin_log::Builder::default()
-                    .level(log_level)
+                    .level(log::LevelFilter::Info)
                     .build(),
             )?;
 
@@ -2255,17 +2545,22 @@ pub fn run() {
             get_user_detail,
             get_user_videos,
             get_liked_videos,
+            get_collected_videos,
+            get_collected_mixes,
+            get_mix_videos,
             get_liked_authors,
             get_recommended,
             get_comments,
             verify_cookie,
             get_current_user,
+            read_clipboard,
             open_verify_browser,
             cookie_browser_login,
             cancel_cookie_browser_login,
             download_video,
             download_user_videos,
             download_liked_videos,
+            download_collected_videos,
             download_liked_authors,
             add_download_task,
             start_download,

@@ -5,6 +5,8 @@ import {
   Link2,
   Sparkles,
   FolderOpen,
+  Heart,
+  Star,
   ArrowUpRight,
   Command,
 } from "lucide-react";
@@ -18,7 +20,6 @@ interface Shortcut {
   desc: string;
   gradient: string;
   iconColor: string;
-  glowColor: string;
   view?: string;
   command?: "search" | "link";
   kbd?: string;
@@ -31,7 +32,6 @@ const shortcuts: Shortcut[] = [
     desc: "通过用户名或抖音号查找创作者",
     gradient: "from-accent/20 via-accent/5 to-transparent",
     iconColor: "text-accent",
-    glowColor: "shadow-[0_0_20px_rgba(254,44,85,0.15)]",
     command: "search",
     kbd: "⌘K",
   },
@@ -41,7 +41,6 @@ const shortcuts: Shortcut[] = [
     desc: "解析分享链接，一键下载视频",
     gradient: "from-info/20 via-info/5 to-transparent",
     iconColor: "text-info",
-    glowColor: "shadow-[0_0_20px_rgba(124,92,252,0.15)]",
     command: "link",
     kbd: "⌘L",
   },
@@ -51,8 +50,23 @@ const shortcuts: Shortcut[] = [
     desc: "浏览抖音推荐流内容",
     gradient: "from-purple-500/20 via-purple-500/5 to-transparent",
     iconColor: "text-purple-400",
-    glowColor: "shadow-[0_0_20px_rgba(168,85,247,0.15)]",
     view: "recommended",
+  },
+  {
+    icon: Heart,
+    label: "点赞视频",
+    desc: "查看你点赞过的视频",
+    gradient: "from-pink-500/20 via-pink-500/5 to-transparent",
+    iconColor: "text-pink-400",
+    view: "liked",
+  },
+  {
+    icon: Star,
+    label: "收藏内容",
+    desc: "查看收藏的视频和合集",
+    gradient: "from-amber-500/20 via-amber-500/5 to-transparent",
+    iconColor: "text-amber-400",
+    view: "collected",
   },
   {
     icon: FolderOpen,
@@ -60,7 +74,6 @@ const shortcuts: Shortcut[] = [
     desc: "管理已下载的视频和图片",
     gradient: "from-success/20 via-success/5 to-transparent",
     iconColor: "text-success",
-    glowColor: "shadow-[0_0_20px_rgba(0,214,143,0.15)]",
     view: "downloads",
     kbd: "⌘4",
   },
@@ -68,11 +81,11 @@ const shortcuts: Shortcut[] = [
 
 const container = {
   hidden: {},
-  show: { transition: { staggerChildren: 0.05 } },
+  show: { transition: { staggerChildren: 0.04 } },
 };
 
 const item = {
-  hidden: { opacity: 0, y: 12 },
+  hidden: { opacity: 0, y: 10 },
   show: {
     opacity: 1,
     y: 0,
@@ -90,23 +103,23 @@ export function Hero() {
       setCommandMode(s.command);
       setCommandOpen(true);
     } else if (s.view) {
-      setView(s.view as "recommended" | "downloads");
+      setView(s.view as "recommended" | "downloads" | "liked" | "collected");
     }
   };
 
   return (
-    <div className="relative flex items-center justify-center h-full px-8">
+    <div className="relative flex items-center justify-center h-full px-6 py-8">
       <AmbientBackground />
 
       <motion.div
-        className="relative z-10 w-full max-w-[560px] flex flex-col items-center"
+        className="relative z-10 w-full max-w-[720px] flex flex-col items-center"
         variants={container}
         initial={false}
         animate="show"
       >
         {/* Status pill */}
-        <motion.div variants={item} className="mb-6">
-          <span className="inline-flex items-center gap-2 px-3.5 h-7 rounded-full bg-success/8 border border-success/20 text-[0.68rem] font-semibold text-success">
+        <motion.div variants={item} className="mb-4">
+          <span className="inline-flex items-center gap-2 px-3 h-6 rounded-full bg-success/8 border border-success/20 text-[0.62rem] font-semibold text-success">
             <span className="relative flex h-1.5 w-1.5">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60" />
               <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-success" />
@@ -115,14 +128,14 @@ export function Hero() {
           </span>
         </motion.div>
 
-        {/* Title — gradient text */}
-        <motion.div variants={item} className="mb-2 flex items-center gap-2">
-          <div className="h-9 w-9 overflow-visible rounded-[14px] bg-transparent drop-shadow-[0_10px_24px_rgba(0,0,0,0.14)]">
+        {/* Title */}
+        <motion.div variants={item} className="mb-1.5 flex items-center gap-2">
+          <div className="h-8 w-8 overflow-visible rounded-[12px] bg-transparent drop-shadow-[0_8px_20px_rgba(0,0,0,0.12)]">
             <img src="/animated_icon.svg" alt="Douyin Downloader" className="h-full w-full object-contain" />
           </div>
-          <h1 className="text-[1.35rem] font-[750] tracking-[-0.02em] text-center">
+          <h1 className="text-[1.25rem] font-[750] tracking-[-0.02em]">
             <span className="bg-gradient-to-r from-text via-text to-text-secondary bg-clip-text">
-              Douyin Downloader
+              DY Downloader
             </span>
           </h1>
         </motion.div>
@@ -130,17 +143,17 @@ export function Hero() {
         {/* Subtitle */}
         <motion.p
           variants={item}
-          className="text-[0.82rem] text-text-muted text-center mb-8 max-w-[360px] leading-relaxed"
+          className="text-[0.75rem] text-text-muted text-center mb-6 max-w-[320px] leading-relaxed"
         >
           搜索用户、粘贴链接、浏览推荐
           <br />
           <span className="text-text-secondary">一站式视频解析与下载</span>
         </motion.p>
 
-        {/* Shortcut Grid — 2x2, glassmorphism cards */}
+        {/* Shortcut Grid — 3 columns, compact cards */}
         <motion.div
           variants={container}
-          className="w-full grid grid-cols-2 gap-3"
+          className="w-full grid grid-cols-3 gap-2.5"
         >
           {shortcuts.map((s) => (
             <motion.button
@@ -148,13 +161,12 @@ export function Hero() {
               variants={item}
               onClick={() => handleShortcut(s)}
               className={cn(
-                "group relative flex flex-col gap-3 p-5 rounded-[var(--radius-xl)] text-left cursor-pointer overflow-hidden",
+                "group relative flex flex-col gap-2.5 p-3.5 rounded-[14px] text-left cursor-pointer overflow-hidden",
                 "bg-surface-solid/50 backdrop-blur-sm",
                 "border border-border",
                 "hover:border-border-strong hover:bg-surface-raised",
                 "hover:shadow-lg",
-                "transition-[transform,box-shadow,border-color,background-color] duration-[var(--duration-base)] ease-[var(--ease-spring)]",
-                s.glowColor
+                "transition-[transform,box-shadow,border-color,background-color] duration-[var(--duration-base)] ease-[var(--ease-spring)]"
               )}
               whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.97 }}
@@ -162,7 +174,7 @@ export function Hero() {
               {/* Gradient accent strip at top */}
               <div
                 className={cn(
-                  "absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity duration-300",
+                  "absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity duration-300",
                   s.gradient.replace("/20", "/60").replace("to-transparent", "via-transparent to-transparent")
                 )}
               />
@@ -170,7 +182,7 @@ export function Hero() {
               {/* Background gradient glow on hover */}
               <div
                 className={cn(
-                  "absolute -top-12 -right-12 w-32 h-32 rounded-full bg-gradient-to-br opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-2xl",
+                  "absolute -top-8 -right-8 w-24 h-24 rounded-full bg-gradient-to-br opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-2xl",
                   s.gradient
                 )}
               />
@@ -179,7 +191,7 @@ export function Hero() {
               <div className="relative flex items-center justify-between w-full">
                 <div
                   className={cn(
-                    "w-11 h-11 rounded-[13px] flex items-center justify-center",
+                    "w-9 h-9 rounded-[10px] flex items-center justify-center",
                     "bg-gradient-to-br",
                     s.gradient,
                     "border border-border/60 group-hover:border-border-strong",
@@ -188,13 +200,13 @@ export function Hero() {
                 >
                   <s.icon
                     className={cn(
-                      "w-[22px] h-[22px] transition-transform duration-300 group-hover:scale-110",
+                      "w-[18px] h-[18px] transition-transform duration-300 group-hover:scale-110",
                       s.iconColor
                     )}
                   />
                 </div>
                 {s.kbd && (
-                  <kbd className="text-[0.58rem] font-mono px-1.5 py-0.5 rounded-[6px] bg-surface border border-border text-text-muted opacity-60 group-hover:opacity-100 transition-opacity">
+                  <kbd className="text-[0.52rem] font-mono px-1 py-0.5 rounded-[4px] bg-surface border border-border text-text-muted opacity-50 group-hover:opacity-100 transition-opacity">
                     {s.kbd}
                   </kbd>
                 )}
@@ -202,13 +214,13 @@ export function Hero() {
 
               {/* Text */}
               <div className="relative">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[0.88rem] font-semibold text-text">
+                <div className="flex items-center gap-1">
+                  <span className="text-[0.78rem] font-semibold text-text">
                     {s.label}
                   </span>
-                  <ArrowUpRight className="w-3.5 h-3.5 text-text-muted opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-[opacity,transform] duration-300" />
+                  <ArrowUpRight className="w-3 h-3 text-text-muted opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-[opacity,transform] duration-300" />
                 </div>
-                <div className="text-[0.72rem] text-text-muted leading-snug mt-0.5">
+                <div className="text-[0.62rem] text-text-muted leading-snug mt-0.5 line-clamp-2">
                   {s.desc}
                 </div>
               </div>
@@ -217,23 +229,23 @@ export function Hero() {
         </motion.div>
 
         {/* Quick Stats */}
-        <div className="w-full mt-6">
+        <div className="w-full mt-4">
           <QuickStats />
         </div>
 
         {/* Keyboard hint */}
         <motion.div
           variants={item}
-          className="mt-6 flex items-center gap-1.5 text-text-muted"
+          className="mt-4 flex items-center gap-1.5 text-text-muted"
         >
-          <kbd className="text-[0.58rem] font-mono px-1.5 py-0.5 rounded bg-surface border border-border">
+          <kbd className="text-[0.52rem] font-mono px-1.5 py-0.5 rounded bg-surface border border-border">
             <Command className="w-2.5 h-2.5 inline" />
           </kbd>
-          <span className="text-[0.65rem]">+</span>
-          <kbd className="text-[0.58rem] font-mono px-1.5 py-0.5 rounded bg-surface border border-border">
+          <span className="text-[0.58rem]">+</span>
+          <kbd className="text-[0.52rem] font-mono px-1.5 py-0.5 rounded bg-surface border border-border">
             K
           </kbd>
-          <span className="text-[0.65rem] ml-1">快速打开命令面板</span>
+          <span className="text-[0.58rem] ml-1">快速打开命令面板</span>
         </motion.div>
       </motion.div>
     </div>

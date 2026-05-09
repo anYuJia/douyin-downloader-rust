@@ -1,6 +1,6 @@
 [package]
 name = "douyin-downloader"
-version = "0.0.14"
+version = "0.0.15"
 description = "抖音视频下载器"
 authors = ["you"]
 license = ""
@@ -25,6 +25,7 @@ tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-updater = "2"
+tauri-plugin-clipboard-manager = "2"
 
 # HTTP 客户端
 reqwest = { version = "0.12", features = ["json", "cookies", "gzip", "brotli", "stream"] }

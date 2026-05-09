@@ -7,7 +7,7 @@ import type { AppState, ViewType, ThemeMode, DownloadTask, LogEntry } from "@/ty
 
 let themeWatcherInitialized = false;
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>((set, get) => ({
   currentView: "home",
   setView: (view: ViewType) => set({ currentView: view }),
 
@@ -22,8 +22,22 @@ export const useAppStore = create<AppState>((set) => ({
     applyTheme(theme);
   },
 
-  sidebarCollapsed: false,
-  toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+  sidebarCollapsed: (() => {
+    try {
+      return localStorage.getItem("dy_sidebar_collapsed") === "1";
+    } catch {
+      return false;
+    }
+  })(),
+  toggleSidebar: () => {
+    const next = !get().sidebarCollapsed;
+    set({ sidebarCollapsed: next });
+    try {
+      localStorage.setItem("dy_sidebar_collapsed", next ? "1" : "0");
+    } catch {
+      // Ignore storage failures.
+    }
+  },
 
   bottomBarExpanded: false,
   toggleBottomBar: () => set((s) => ({ bottomBarExpanded: !s.bottomBarExpanded })),

@@ -1,6 +1,7 @@
 //! API 客户端
 
 use crate::config::{get_user_agent, AppConfig};
+use crate::write_log_file;
 use crate::sign;
 use anyhow::{anyhow, Result};
 use rand::{distributions::Alphanumeric, Rng};
@@ -935,6 +936,82 @@ impl DouyinClient {
         Ok(response)
     }
 
+    async fn request_collected_videos_response(
+        &self,
+        max_cursor: i64,
+        count: u32,
+    ) -> Result<serde_json::Value> {
+        let url = "https://www.douyin.com/aweme/v1/web/aweme/listcollection/";
+
+        // 1. 构建 query string 参数（通用参数 + 业务参数，用于签名和 URL）
+        let mut query_params = crate::config::get_common_params();
+        query_params.insert("count".to_string(), count.to_string());
+        query_params.insert("cursor".to_string(), max_cursor.to_string());
+
+        let mut headers = crate::config::get_common_headers(&self.config.cookie);
+        headers.insert(
+            "Referer".to_string(),
+            "https://www.douyin.com/user/self?from_tab_name=main&showSubTab=video&showTab=favorite_collection".to_string(),
+        );
+        headers.insert(
+            "Content-Type".to_string(),
+            "application/x-www-form-urlencoded; charset=UTF-8".to_string(),
+        );
+        headers.insert("Origin".to_string(), "https://www.douyin.com".to_string());
+
+        // 2. enrich_request 补充 msToken、verifyFp、fp、webid 等
+        self.enrich_request(&mut query_params, &mut headers).await;
+
+        // 3. 生成 a_bogus 签名（基于 query string 参数）
+        let params_str = serde_urlencoded::to_string(&query_params).unwrap_or_default();
+        let user_agent = headers
+            .get("User-Agent")
+            .map(String::as_str)
+            .unwrap_or_else(|| crate::config::get_user_agent());
+        let a_bogus = sign::sign_detail(&params_str, user_agent);
+        query_params.insert("a_bogus".to_string(), a_bogus.clone());
+
+        // 4. POST body 只放业务参数
+        let mut body_params = HashMap::new();
+        body_params.insert("count".to_string(), count.to_string());
+        body_params.insert("cursor".to_string(), max_cursor.to_string());
+
+        let req_log = format!(
+            "[CollectedVideos] POST url={}, query_a_bogus={}, body_count={}, body_cursor={}",
+            url, a_bogus, count, max_cursor
+        );
+        log::info!("{}", req_log);
+        write_log_file(&format!("{}\n", req_log));
+
+        // 5. 发送：query string 带所有参数（含签名），body 带业务参数
+        let mut req = self.client.post(url).query(&query_params).form(&body_params);
+        for (key, value) in &headers {
+            req = req.header(key, value);
+        }
+
+        let response = req.send().await.map_err(|e| {
+            log::error!("[CollectedVideos] request failed: {}", e);
+            anyhow!("HTTP request failed: {}", e)
+        })?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!("HTTP error: {}", response.status()));
+        }
+
+        let json = response.json::<serde_json::Value>().await.map_err(|e| {
+            log::error!("[CollectedVideos] JSON parse failed: {}", e);
+            anyhow!("JSON parse failed: {}", e)
+        })?;
+
+        let status_code = json["status_code"].as_i64().unwrap_or(0);
+        if status_code != 0 {
+            let status_msg = json["status_msg"].as_str().unwrap_or("unknown error");
+            return Err(anyhow!("API error: {} (code={})", status_msg, status_code));
+        }
+
+        Ok(json)
+    }
+
     pub async fn get_liked_videos_python_style(
         &self,
         sec_uid: &str,
@@ -954,6 +1031,315 @@ impl DouyinClient {
                     .collect()
             })
             .unwrap_or_default())
+    }
+
+    pub async fn get_collected_videos_python_style(
+        &self,
+        max_cursor: i64,
+        count: u32,
+    ) -> Result<(Vec<LikedVideoItem>, i64, bool)> {
+        let response = self
+            .request_collected_videos_response(max_cursor, count)
+            .await?;
+
+        // 打印完整响应结构，用于调试字段名
+        let keys = response.as_object().map(|m| m.keys().collect::<Vec<_>>());
+        let hm = response["has_more"].to_string();
+        let mc = response["max_cursor"].to_string();
+        let c = response["cursor"].to_string();
+        log::info!("[CollectedVideos] response keys: {:?}", keys);
+        log::info!("[CollectedVideos] has_more: {:?}, max_cursor: {:?}, cursor: {:?}", hm, mc, c);
+        write_log_file(&format!("[CollectedVideos] response keys: {:?}, has_more={}, max_cursor={}, cursor={}\n", keys, hm, mc, c));
+        if let Some(arr) = response["aweme_list"].as_array() {
+            if let Some(last) = arr.last() {
+                log::info!("[CollectedVideos] last item keys: {:?}", last.as_object().map(|m| m.keys().collect::<Vec<_>>()));
+                log::info!("[CollectedVideos] last item collect_time/create_time: {:?} / {:?}", last["collect_time"], last["create_time"]);
+            }
+        }
+
+        let videos: Vec<LikedVideoItem> = response["aweme_list"]
+            .as_array()
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|post| self.build_liked_video_item(post))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let has_more = response["has_more"].as_i64().unwrap_or(0) == 1
+            || response["has_more"].as_bool().unwrap_or(false);
+        // 优先用 cursor（API 实际返回的分页游标），兼容 max_cursor
+        let cursor_val = response["cursor"].as_i64();
+        let max_cursor_val = response["max_cursor"].as_i64();
+        let next_cursor = cursor_val
+            .or(max_cursor_val)
+            .unwrap_or(0);
+
+        let log_line = format!(
+            "[CollectedVideos] parsed {} videos, cursor={:?}, max_cursor={:?}, next_cursor={}, has_more={}",
+            videos.len(), cursor_val, max_cursor_val, next_cursor, has_more
+        );
+        log::info!("{}", log_line);
+        write_log_file(&format!("{}\n", log_line));
+
+        Ok((videos, next_cursor, has_more))
+    }
+
+    /// 获取收藏视频列表（返回 VideoInfo，用于批量下载）
+    pub async fn get_collected_videos(
+        &self,
+        max_cursor: i64,
+        count: u32,
+    ) -> Result<(Vec<VideoInfo>, i64, bool)> {
+        let response = self
+            .request_collected_videos_response(max_cursor, count)
+            .await?;
+
+        let aweme_list = response["aweme_list"].as_array();
+        let has_more = response["has_more"].as_i64().unwrap_or(0) == 1
+            || response["has_more"].as_bool().unwrap_or(false);
+        // 优先用 cursor（API 实际返回的分页游标），兼容 max_cursor
+        let cursor = response["cursor"].as_i64()
+            .or_else(|| response["max_cursor"].as_i64())
+            .unwrap_or(0);
+
+        let videos = if let Some(list) = aweme_list {
+            list.iter()
+                .filter_map(|v| self.parse_video_info(v).ok())
+                .collect()
+        } else {
+            vec![]
+        };
+
+        Ok((videos, cursor, has_more))
+    }
+
+    /// 获取收藏合集列表（GET 请求，所有参数在 query string）
+    pub async fn get_collected_mixes(
+        &self,
+        max_cursor: i64,
+        count: u32,
+    ) -> Result<(Vec<CollectionMixItem>, i64, bool)> {
+        let url = "https://www.douyin.com/aweme/v1/web/mix/listcollection/";
+
+        // 1. 构建 query string 参数（通用参数 + 业务参数 + 签名）
+        let mut query_params = crate::config::get_common_params();
+        query_params.insert("count".to_string(), count.to_string());
+        query_params.insert("cursor".to_string(), max_cursor.to_string());
+
+        let mut headers = crate::config::get_common_headers(&self.config.cookie);
+        headers.insert(
+            "Referer".to_string(),
+            "https://www.douyin.com/user/self?from_tab_name=main&showTab=favorite_collection"
+                .to_string(),
+        );
+
+        // 2. enrich_request 补充 msToken、verifyFp、fp、webid 等
+        self.enrich_request(&mut query_params, &mut headers).await;
+
+        // 3. 生成 a_bogus 签名（基于 query string 参数）
+        let params_str = serde_urlencoded::to_string(&query_params).unwrap_or_default();
+        let user_agent = headers
+            .get("User-Agent")
+            .map(String::as_str)
+            .unwrap_or_else(|| crate::config::get_user_agent());
+        let a_bogus = sign::sign_detail(&params_str, user_agent);
+        query_params.insert("a_bogus".to_string(), a_bogus.clone());
+
+        write_log_file(&format!(
+            "[CollectedMixes] GET url={}, query_a_bogus={}, cursor={}, count={}\n",
+            url, a_bogus, max_cursor, count
+        ));
+
+        // 4. GET 请求：所有参数在 query string
+        let mut req = self.client.get(url).query(&query_params);
+        for (key, value) in &headers {
+            req = req.header(key, value);
+        }
+
+        let response = req.send().await.map_err(|e| {
+            log::error!("[CollectedMixes] request failed: {}", e);
+            anyhow!("HTTP request failed: {}", e)
+        })?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!("HTTP error: {}", response.status()));
+        }
+
+        let json = response.json::<serde_json::Value>().await.map_err(|e| {
+            log::error!("[CollectedMixes] JSON parse failed: {}", e);
+            anyhow!("JSON parse failed: {}", e)
+        })?;
+
+        let status_code = json["status_code"].as_i64().unwrap_or(0);
+        write_log_file(&format!("[CollectedMixes] status_code={}\n", status_code));
+        if status_code != 0 {
+            let status_msg = json["status_msg"].as_str().unwrap_or("unknown error");
+            let err_str = serde_json::to_string(&json).unwrap_or_default();
+            write_log_file(&format!("[CollectedMixes] API error: {} | full: {}\n", status_msg, err_str));
+            return Err(anyhow!("API error: {} (code={})", status_msg, status_code));
+        }
+
+        // 打印完整响应结构，用于调试字段名
+        let keys = json.as_object().map(|m| m.keys().collect::<Vec<_>>());
+        let hm = json["has_more"].to_string();
+        let c = json["cursor"].to_string();
+        let mc = json["max_cursor"].to_string();
+        write_log_file(&format!("[CollectedMixes] keys={:?}, has_more={}, cursor={}, max_cursor={}\n", keys, hm, c, mc));
+
+        let has_more = json["has_more"].as_i64().unwrap_or(0) == 1
+            || json["has_more"].as_bool().unwrap_or(false);
+        // 优先用 cursor（API 实际返回的分页游标），兼容 max_cursor
+        let next_cursor = json["cursor"].as_i64()
+            .or_else(|| json["max_cursor"].as_i64())
+            .unwrap_or(0);
+
+        let mix_count = json["mix_infos"].as_array().map(|a| a.len()).unwrap_or(0);
+        write_log_file(&format!("[CollectedMixes] mix_infos count={}, next_cursor={}, has_more={}\n", mix_count, next_cursor, has_more));
+
+        let mixes: Vec<CollectionMixItem> = json["mix_infos"]
+            .as_array()
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| self.build_collection_mix_item(item))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        log::info!("[CollectedMixes] parsed {} mixes, next_cursor={}, has_more={}", mixes.len(), next_cursor, has_more);
+
+        Ok((mixes, next_cursor, has_more))
+    }
+
+    fn build_collection_mix_item(&self, item: &serde_json::Value) -> Option<CollectionMixItem> {
+        let mix_id = item["mix_id"].as_str().unwrap_or_default().to_string();
+        if mix_id.is_empty() {
+            return None;
+        }
+
+        let author = item.get("author");
+        let statis = item.get("statis");
+
+        Some(CollectionMixItem {
+            mix_id,
+            mix_name: item["mix_name"].as_str().unwrap_or_default().to_string(),
+            desc: item["desc"].as_str().unwrap_or_default().to_string(),
+            cover_url: item
+                .get("cover_url")
+                .and_then(|c| c.get("url_list"))
+                .and_then(|list| list.as_array())
+                .and_then(|arr| arr.first())
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string(),
+            author: CollectionMixAuthor {
+                nickname: author
+                    .and_then(|a| a["nickname"].as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                sec_uid: author
+                    .and_then(|a| a["sec_uid"].as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                avatar_thumb: author
+                    .and_then(|a| a.get("avatar_thumb"))
+                    .and_then(|av| av.get("url_list"))
+                    .and_then(|list| list.as_array())
+                    .and_then(|arr| arr.first())
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+            },
+            statis: CollectionMixStatis {
+                collect_vv: statis
+                    .and_then(|s| s["collect_vv"].as_i64())
+                    .unwrap_or(0),
+                play_vv: statis
+                    .and_then(|s| s["play_vv"].as_i64())
+                    .unwrap_or(0),
+                updated_to_episode: statis
+                    .and_then(|s| s["updated_to_episode"].as_i64())
+                    .unwrap_or(0),
+            },
+            create_time: item["create_time"].as_i64().unwrap_or(0),
+            update_time: item["update_time"].as_i64().unwrap_or(0),
+            mix_type: item["mix_type"].as_i64().unwrap_or(0) as i32,
+        })
+    }
+
+    /// 获取合集内的视频列表
+    pub async fn get_mix_videos(
+        &self,
+        series_id: &str,
+        cursor: i64,
+        count: u32,
+    ) -> Result<(Vec<VideoInfo>, i64, bool)> {
+        let url = "https://www.douyin.com/aweme/v1/web/series/aweme/";
+
+        let mut all_params = crate::config::get_common_params();
+        all_params.insert("series_id".to_string(), series_id.to_string());
+        all_params.insert("pull_type".to_string(), "2".to_string());
+        all_params.insert("cursor".to_string(), cursor.to_string());
+        all_params.insert("count".to_string(), count.to_string());
+
+        let mut headers = crate::config::get_common_headers(&self.config.cookie);
+        headers.insert(
+            "Referer".to_string(),
+            "https://www.douyin.com/user/self?from_tab_name=main&showTab=favorite_collection"
+                .to_string(),
+        );
+
+        self.enrich_request(&mut all_params, &mut headers).await;
+
+        log::info!(
+            "[MixVideos] GET url={}, series_id={}, cursor={}, count={}",
+            url, series_id, cursor, count
+        );
+
+        let mut req = self.client.get(url).query(&all_params);
+        for (key, value) in &headers {
+            req = req.header(key, value);
+        }
+
+        let response = req.send().await.map_err(|e| {
+            log::error!("[MixVideos] request failed: {}", e);
+            anyhow!("HTTP request failed: {}", e)
+        })?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!("HTTP error: {}", response.status()));
+        }
+
+        let json = response.json::<serde_json::Value>().await.map_err(|e| {
+            log::error!("[MixVideos] JSON parse failed: {}", e);
+            anyhow!("JSON parse failed: {}", e)
+        })?;
+
+        let status_code = json["status_code"].as_i64().unwrap_or(0);
+        if status_code != 0 {
+            let status_msg = json["status_msg"].as_str().unwrap_or("unknown error");
+            return Err(anyhow!("API error: {} (code={})", status_msg, status_code));
+        }
+
+        let aweme_list = json["aweme_list"].as_array();
+        let has_more = json["has_more"].as_i64().unwrap_or(0) == 1
+            || json["has_more"].as_bool().unwrap_or(false);
+        // API 返回 min_cursor 和 max_cursor，下一页使用 max_cursor
+        let next_cursor = json["max_cursor"].as_i64().unwrap_or_else(|| {
+            json["cursor"].as_i64().unwrap_or(0)
+        });
+
+        let videos = if let Some(list) = aweme_list {
+            list.iter()
+                .filter_map(|v| self.parse_video_info(v).ok())
+                .collect()
+        } else {
+            vec![]
+        };
+
+        Ok((videos, next_cursor, has_more))
     }
 
     /// 获取无水印视频 URL
