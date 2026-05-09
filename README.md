@@ -13,7 +13,7 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg?style=flat-square)](https://github.com/anYuJia/douyin-downloader-rust/releases/latest)
 
-基于 Rust + Tauri 2.0 的跨平台桌面版抖音下载工具，支持用户检索、批量下载、推荐视频浏览、点赞列表获取、多媒体作品下载与实时下载进度。
+基于 Rust + Tauri 2.0 + React 的跨平台桌面版抖音下载工具，支持用户检索、批量下载、推荐视频浏览、点赞/收藏列表获取、合集分页管理、多媒体作品下载与实时下载进度。
 
 <p>
   <a href="https://github.com/anYuJia/douyin-downloader-rust/releases/latest"><strong>下载最新版</strong></a>
@@ -52,11 +52,15 @@ Douyin Downloader 是 [DY_video_downloader](https://github.com/anYuJia/DY_video_
 | 批量下载 | 支持下载用户作品、点赞作品、作者列表作品 |
 | 推荐视频 | 支持推荐 feed 浏览与沉浸式播放器预览 |
 | 点赞列表 | 支持获取并浏览自己的点赞视频与点赞作者 |
+| 收藏内容 | 支持收藏视频浏览、收藏合集管理及合集内视频分页加载 |
+| 合集分页 | 合集列表与合集内视频均支持分页加载（每页 12 条） |
 | 多媒体作品 | 支持视频、图集、Live Photo、混合媒体 |
 | 下载质量 | 支持最高质量、兼容优先、最小体积等策略 |
 | 实时进度 | 下载任务状态、当前进度、日志实时更新 |
+| 下载刷新 | 下载完成后自动刷新本地文件列表，无需重启应用 |
 | 浏览器登录 | 内置登录窗口，用于获取可用 Cookie |
 | 本地管理 | 支持下载历史、文件搜索、批量打开和定位 |
+| 导航收缩 | 侧边栏支持展开/收缩，收缩后只显示图标，状态自动持久化 |
 | 自动更新 | 基于 GitHub Release updater metadata 检查新版本 |
 
 ---
@@ -65,13 +69,17 @@ Douyin Downloader 是 [DY_video_downloader](https://github.com/anYuJia/DY_video_
 
 ### 首页
 
-搜索用户、粘贴链接、进入推荐视频和我的下载入口。
+搜索用户、粘贴链接、推荐视频、点赞视频、收藏内容、我的下载六大快捷入口，3 列紧凑布局。侧边栏支持展开/收缩。
 
 <p align="center">
   <a href="docs/home.png">
     <img src="docs/home.png" width="100%" alt="Douyin Downloader 首页">
   </a>
 </p>
+
+### 收藏内容
+
+收藏视频与收藏合集统一管理。合集列表与合集内视频均支持分页加载（每页 12 条），点击进入合集后可浏览全部视频并批量下载。
 
 ### 用户详情
 
@@ -116,9 +124,10 @@ Douyin Downloader 是 [DY_video_downloader](https://github.com/anYuJia/DY_video_
 ### 首次使用
 
 1. 打开应用后，先在设置中完成 Cookie / 登录配置
-2. 使用搜索、推荐视频、点赞列表或粘贴链接解析内容
-3. 选择单个作品下载，或进入用户/点赞列表执行批量下载
-4. 在底部下载面板查看实时进度，在“我的下载”中管理本地文件
+2. 使用搜索、推荐视频、点赞列表、收藏内容或粘贴链接解析内容
+3. 选择单个作品下载，或进入用户/点赞列表/合集执行批量下载
+4. 在底部下载面板查看实时进度，在”我的下载”中管理本地文件
+5. 下载完成后”我的下载”列表会自动刷新，无需重启应用
 
 > **macOS 用户**
 >
@@ -195,7 +204,7 @@ npm run build
 
 - **桌面框架**：Tauri 2
 - **后端**：Rust、Tokio、Reqwest、Axum
-- **前端**：React 19、Vite、TypeScript、Tailwind CSS
+- **前端**：React 19、Vite、TypeScript、Tailwind CSS、Framer Motion、Zustand、Lucide Icons
 - **更新机制**：Tauri updater + GitHub Release metadata
 - **分发产物**：Windows NSIS / portable exe、macOS dmg / app zip、Linux deb / rpm / AppImage
 
