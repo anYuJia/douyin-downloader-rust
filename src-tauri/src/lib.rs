@@ -242,22 +242,45 @@ fn get_config(state: State<'_, AppState>) -> serde_json::Value {
 
 /// 保存配置
 #[tauri::command]
-fn save_config(state: State<'_, AppState>, config: AppConfig) -> serde_json::Value {
+async fn save_config(
+    state: State<'_, AppState>,
+    config: AppConfig,
+) -> Result<serde_json::Value, String> {
     let mut next_config = config;
-    {
-        let current_config = state.config.blocking_lock();
-        if next_config.cookie.trim().is_empty() && !current_config.cookie.trim().is_empty() {
-            next_config.cookie = current_config.cookie.clone();
-        }
+    let current_config = state.config.lock().await.clone();
+    if next_config.cookie.trim().is_empty() && !current_config.cookie.trim().is_empty() {
+        next_config.cookie = current_config.cookie.clone();
     }
+    let client_needs_rebuild =
+        next_config.cookie != current_config.cookie || next_config.proxy != current_config.proxy;
 
     match next_config.save() {
         Ok(_) => {
-            *state.config.blocking_lock() = next_config.clone();
-            serde_json::json!({ "success": true, "message": "配置保存成功" })
+            *state.config.lock().await = next_config.clone();
+
+            if client_needs_rebuild {
+                let mut client_guard = state.client.lock().await;
+                if client_guard.is_some() {
+                    match DouyinClient::new(next_config.clone()) {
+                        Ok(client) => *client_guard = Some(client),
+                        Err(error) => {
+                            log::warn!(
+                                "Failed to rebuild API client after config update: {}",
+                                error
+                            );
+                        }
+                    }
+                }
+            }
+
+            if let Some(downloader) = state.downloader.lock().await.as_mut() {
+                downloader.update_config(next_config);
+            }
+
+            Ok(serde_json::json!({ "success": true, "message": "配置保存成功" }))
         }
         Err(e) => {
-            serde_json::json!({ "success": false, "message": format!("保存失败: {}", e) })
+            Ok(serde_json::json!({ "success": false, "message": format!("保存失败: {}", e) }))
         }
     }
 }

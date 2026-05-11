@@ -2272,4 +2272,33 @@ mod tests {
             Some("lowbr")
         );
     }
+
+    #[test]
+    fn downloader_uses_updated_quality_config() {
+        let mut config = AppConfig {
+            download_quality: "auto".to_string(),
+            ..Default::default()
+        };
+        let mut downloader = Downloader::new(config.clone(), None).expect("downloader");
+        let video = video_with_quality_candidates();
+
+        assert_eq!(
+            downloader
+                .collect_download_media_items(&video)
+                .first()
+                .map(|item| item.url.as_str()),
+            Some("download-default")
+        );
+
+        config.download_quality = "smallest".to_string();
+        downloader.update_config(config);
+
+        assert_eq!(
+            downloader
+                .collect_download_media_items(&video)
+                .first()
+                .map(|item| item.url.as_str()),
+            Some("lowbr")
+        );
+    }
 }
