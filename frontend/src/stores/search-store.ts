@@ -169,11 +169,29 @@ export const useSearchStore = create<SearchStoreState>((set, get) => ({
     });
 
     addLog(`搜索用户: ${query}`, "info");
-    toast(`正在搜索用户: ${query}`, "info");
+    const loadingToastId = toast(`正在搜索用户: ${query}`, "loading");
 
     try {
-      // ... (enrichSearchUserStats helper)
+      const enrichSearchUserStats = (baseUsers: UserInfo[]) => {
+        const candidates = baseUsers.filter(shouldEnrichSearchUser).slice(0, 10);
+        if (candidates.length === 0) return;
+
+        void (async () => {
+          for (let index = 0; index < candidates.length; index += 3) {
+            const batch = candidates.slice(index, index + 3);
+            await Promise.allSettled(
+              batch.map(async (user) => {
+                const detail = await getUserDetail(user.sec_uid, user.nickname);
+                if (requestId !== latestSearchRequestId || !detail.success || !detail.user) return;
+                set((current) => mergeDetailedUserIntoSearchState(current, user, detail.user!));
+              })
+            );
+          }
+        })();
+      };
+
       const result = await searchUser(query);
+      useToastStore.getState().dismiss(loadingToastId);
       if (requestId !== latestSearchRequestId) return;
 
       if (result.need_verify) {
