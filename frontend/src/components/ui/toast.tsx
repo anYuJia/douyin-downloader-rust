@@ -36,9 +36,8 @@ export const useToastStore = create<ToastStore>((set) => ({
   nextId: 1,
   toast: (message, type = "info", title, action) => {
     const id = Date.now() + Math.random();
-    set((s) => ({
+    set(() => ({
       toasts: [
-        ...s.toasts.slice(-4),
         { id, message, type, title, action, duration: type === "loading" ? 0 : 4500 },
       ],
     }));
@@ -250,4 +249,3 @@ export function useToast() {
       toast(message, "loading", title),
   };
 }
-

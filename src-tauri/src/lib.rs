@@ -264,15 +264,16 @@ fn save_config(state: State<'_, AppState>, config: AppConfig) -> serde_json::Val
 
 /// 选择目录
 #[tauri::command]
-fn select_directory(app: tauri::AppHandle) -> Result<Option<String>, String> {
+async fn select_directory(app: tauri::AppHandle) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
 
-    let folder = app.dialog().file().blocking_pick_folder();
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog().file().pick_folder(move |folder| {
+        let _ = tx.send(folder.map(|path| path.to_string()));
+    });
 
-    match folder {
-        Some(path) => Ok(Some(path.to_string())),
-        None => Ok(None),
-    }
+    rx.await
+        .map_err(|_| "选择目录对话框未返回结果".to_string())
 }
 
 /// 验证 Cookie (简化版)
