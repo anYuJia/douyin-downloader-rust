@@ -8,6 +8,7 @@ import { VideoDetailModal } from "@/components/modals/video-detail";
 import { FullscreenPlayer } from "@/components/player/fullscreen-player";
 import { useDownloads } from "@/hooks/use-downloads";
 import { useSearchStore } from "@/stores/search-store";
+import { formatNumber } from "@/lib/utils";
 import type { VideoInfo } from "@/lib/tauri";
 import { videoAuthorToUserInfo } from "@/lib/video-author";
 
@@ -29,6 +30,7 @@ export function VideoGrid() {
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const showPlaceholder = currentUser && !loadingVideos && videos.length === 0;
+  const totalVideosCount = currentUser?.aweme_count || videos.length;
   const openPlayer = (video: VideoInfo) => {
     if (selectMode) {
       toggleSelected(video.aweme_id);
@@ -99,7 +101,9 @@ export function VideoGrid() {
             <Grid3x3 className="w-4 h-4 text-success" />
             <h3 className="text-[0.9rem] font-semibold text-text">作品列表</h3>
             <Badge variant="secondary">
-              {loadingVideos && videos.length === 0 ? "加载中..." : `${videos.length} 个作品`}
+              {loadingVideos && videos.length === 0
+                ? "加载中..."
+                : `${formatNumber(totalVideosCount)} 个作品`}
             </Badge>
           </div>
 
