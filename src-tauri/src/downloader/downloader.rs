@@ -1146,7 +1146,8 @@ impl Downloader {
                     "failed": final_failed,
                     "message": format!("下载完成: {} 个视频, {} 个跳过", final_completed, final_skipped)
                 }),
-            ).await;
+            )
+            .await;
         }
 
         // 清理
