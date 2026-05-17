@@ -2,20 +2,14 @@
 // Tauri IPC Wrappers
 // ═══════════════════════════════════════════════
 
-type TauriInvoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
+import { invoke as tauriInvoke, isTauri } from "@tauri-apps/api/core";
+import { listen as tauriListen } from "@tauri-apps/api/event";
+
 const MEDIA_PROXY_BASE = "http://127.0.0.1:39143/api/media/proxy";
 const LOCAL_MEDIA_BASE = "http://127.0.0.1:39143/api/local-media";
 
 function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
-  const tauriInvoke = (window as Window & {
-    __TAURI__?: {
-      core?: {
-        invoke?: TauriInvoke;
-      };
-    };
-  }).__TAURI__?.core?.invoke;
-
-  if (!tauriInvoke) {
+  if (!isTauri()) {
     return Promise.reject(new Error("Tauri API unavailable"));
   }
 
@@ -789,15 +783,11 @@ export function getErrorMessage(error: unknown, fallback: string): string {
 type TauriUnlisten = () => void;
 
 export async function listenEvent<T>(event: string, handler: (payload: T) => void): Promise<TauriUnlisten> {
-  const tauriListen = (window as Window & {
-    __TAURI__?: { event?: { listen?: (event: string, cb: (ev: { payload: T }) => void) => Promise<TauriUnlisten> } };
-  }).__TAURI__?.event?.listen;
-
-  if (!tauriListen) {
+  if (!isTauri()) {
     return () => {};
   }
 
-  return tauriListen(event, (ev) => handler(ev.payload));
+  return tauriListen<T>(event, (ev) => handler(ev.payload));
 }
 
 // ── Tauri invoke wrappers ──
@@ -853,7 +843,7 @@ export async function saveConfig(config: Partial<AppConfig>): Promise<{ success:
   const current = await getConfig().catch(() => ({} as Partial<AppConfig>));
   const nextConfig: AppConfig = {
     download_path: config.download_path ?? config.download_dir ?? current.download_path ?? current.download_dir ?? "",
-    filename_template: config.filename_template ?? current.filename_template ?? "{author}_{title}_{date}",
+    filename_template: config.filename_template ?? current.filename_template ?? "{title}_{aweme_id}",
     max_concurrent: config.max_concurrent ?? current.max_concurrent ?? 3,
     download_quality: config.download_quality ?? current.download_quality ?? "auto",
     auto_create_folder: config.auto_create_folder ?? current.auto_create_folder ?? true,

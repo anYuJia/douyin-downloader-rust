@@ -81,6 +81,19 @@ function playerMediaProxyUrl(url: string | null | undefined, mediaType: "video" 
   return `${proxied}${proxied.includes("?") ? "&" : "?"}player_retry=${encodeURIComponent(String(retryKey))}`;
 }
 
+function finiteMediaTime(value: number): number {
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function readMediaDuration(node: HTMLMediaElement): number {
+  const duration = finiteMediaTime(node.duration);
+  if (duration > 0) return duration;
+
+  const ranges = node.seekable;
+  if (!ranges.length) return 0;
+  return finiteMediaTime(ranges.end(ranges.length - 1));
+}
+
 export function FullscreenPlayer({
   videos,
   initialIndex = 0,
@@ -196,6 +209,14 @@ export function FullscreenPlayer({
     }
   }, []);
 
+  const syncVideoProgress = useCallback((node: HTMLVideoElement) => {
+    setCurrentTime(finiteMediaTime(node.currentTime));
+    const nextDuration = readMediaDuration(node);
+    if (nextDuration > 0) {
+      setDuration(nextDuration);
+    }
+  }, []);
+
   const startVideoProgressLoop = useCallback(() => {
     if (videoProgressRafRef.current !== null) return;
 
@@ -209,8 +230,7 @@ export function FullscreenPlayer({
       const now = performance.now();
       if (now - progressSampleRef.current >= 50 || node.paused || node.ended) {
         progressSampleRef.current = now;
-        setCurrentTime(node.currentTime || 0);
-        setDuration(node.duration || 0);
+        syncVideoProgress(node);
       }
 
       if (!node.paused && !node.ended) {
@@ -221,7 +241,7 @@ export function FullscreenPlayer({
     };
 
     videoProgressRafRef.current = window.requestAnimationFrame(tick);
-  }, []);
+  }, [syncVideoProgress]);
 
   const goToVideo = useCallback((index: number) => {
     if (index < 0 || index >= videos.length) return;
@@ -996,12 +1016,23 @@ export function FullscreenPlayer({
                     onWaiting={showBufferingSoon}
                     onStalled={showBufferingSoon}
                     onLoadedMetadata={(event) => {
-                      setDuration(event.currentTarget.duration || 0);
+                      syncVideoProgress(event.currentTarget);
                       event.currentTarget.volume = effectiveVolume / 100;
                       event.currentTarget.muted = shouldUseBgmForCurrentMedia || muted || volume === 0;
                       event.currentTarget.playbackRate = playbackRate;
+                      if (event.currentTarget.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+                        markMediaReady();
+                      }
+                    }}
+                    onLoadedData={(event) => {
+                      syncVideoProgress(event.currentTarget);
+                      markMediaReady();
+                    }}
+                    onDurationChange={(event) => {
+                      syncVideoProgress(event.currentTarget);
                     }}
                     onCanPlay={(event) => {
+                      syncVideoProgress(event.currentTarget);
                       markMediaReady();
                       releaseMediaSwitchSoon();
                       if (shouldUseBgmForCurrentMedia && desiredPlayingRef.current) {
@@ -1019,8 +1050,23 @@ export function FullscreenPlayer({
                         startVideoProgressLoop();
                       }
                     }}
-                    onPlay={() => {
+                    onTimeUpdate={(event) => {
+                      syncVideoProgress(event.currentTarget);
+                      if (loadState !== "ready" && event.currentTarget.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+                        markMediaReady();
+                      }
+                    }}
+                    onPlay={(event) => {
                       desiredPlayingRef.current = true;
+                      syncVideoProgress(event.currentTarget);
+                      setPlaying(true);
+                      startVideoProgressLoop();
+                    }}
+                    onPlaying={(event) => {
+                      syncVideoProgress(event.currentTarget);
+                      if (loadState !== "ready") {
+                        markMediaReady();
+                      }
                       setPlaying(true);
                       startVideoProgressLoop();
                     }}

@@ -273,7 +273,12 @@ async fn save_config(
             }
 
             if let Some(downloader) = state.downloader.lock().await.as_mut() {
-                downloader.update_config(next_config);
+                if let Err(error) = downloader.update_config(next_config) {
+                    log::warn!(
+                        "Failed to update downloader config after config save: {}",
+                        error
+                    );
+                }
             }
 
             Ok(serde_json::json!({ "success": true, "message": "配置保存成功" }))
@@ -317,37 +322,13 @@ async fn open_verify_browser(
         .filter(|value| !value.is_empty())
         .unwrap_or("https://www.douyin.com/");
     let target_url = Url::parse(requested_url).map_err(|error| format!("URL 无效: {}", error))?;
-    let cookie_literal =
-        serde_json::to_string(&cookie).map_err(|error| format!("Cookie 序列化失败: {}", error))?;
-    let cookie_script = format!(
-        r#"
-        (() => {{
-            const rawCookie = {cookie_literal};
-            if (!rawCookie) return;
-            try {{
-                if (window.sessionStorage) {{
-                    sessionStorage.removeItem('__dy_verify_cookie_applied');
-                }}
-            }} catch (error) {{}}
-            rawCookie.split(';').map(item => item.trim()).filter(Boolean).forEach(item => {{
-                try {{
-                    document.cookie = `${{item}}; domain=.douyin.com; path=/`;
-                }} catch (error) {{}}
-            }});
-            try {{
-                if (window.sessionStorage) {{
-                    sessionStorage.setItem('__dy_verify_cookie_applied', String(Date.now()));
-                    setTimeout(() => window.location.reload(), 120);
-                }}
-            }} catch (error) {{}}
-        }})();
-        "#
-    );
 
     if let Some(window) = app.get_webview_window("verify-browser") {
         let _ = window.set_focus();
         let _ = window.show();
-        let _ = window.eval(&cookie_script);
+        for cookie in parse_cookie_string(&cookie) {
+            let _ = window.set_cookie(cookie);
+        }
         let _ = window.navigate(target_url);
         return Ok(serde_json::json!({
             "success": true,
@@ -356,18 +337,22 @@ async fn open_verify_browser(
         }));
     }
 
-    tauri::WebviewWindowBuilder::new(
+    let window = tauri::WebviewWindowBuilder::new(
         &app,
         "verify-browser",
-        tauri::WebviewUrl::External(target_url),
+        tauri::WebviewUrl::External(target_url.clone()),
     )
     .title("抖音验证")
     .inner_size(1100.0, 750.0)
     .resizable(true)
     .focused(true)
-    .initialization_script(&cookie_script)
     .build()
     .map_err(|error| format!("无法打开验证窗口: {}", error))?;
+
+    for cookie in parse_cookie_string(&cookie) {
+        let _ = window.set_cookie(cookie);
+    }
+    let _ = window.navigate(target_url);
 
     Ok(serde_json::json!({
         "success": true,
@@ -592,7 +577,12 @@ async fn cookie_browser_login(
                             *client_state.lock().await = Some(client);
                         }
                         if let Some(downloader) = downloader_state.lock().await.as_mut() {
-                            downloader.update_config(next_config);
+                            if let Err(error) = downloader.update_config(next_config) {
+                                log::warn!(
+                                    "Failed to update downloader config after cookie login: {}",
+                                    error
+                                );
+                            }
                         }
 
                         let _ = window.close();
@@ -2724,9 +2714,7 @@ async fn download_update(app_handle: tauri::AppHandle) -> Result<serde_json::Val
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let log_level = if cfg!(debug_assertions) {
